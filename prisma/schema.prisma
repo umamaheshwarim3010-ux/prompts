@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Pages/Files table - stores information about each code file
+model Page {
+  id            String    @id @default(cuid())
+  filePath      String    @unique
+  componentName String
+  totalLines    Int
+  purpose       String
+  promptFilePath String?   // Path to the source .txt file
+  rawContent    String?   @db.Text // Store the full original text content
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sections      Section[]
+  stateVars     StateVar[]
+  functions     Function[]
+  dependencies  Dependency[] @relation("FromPage")
+  dependents    Dependency[] @relation("ToPage")
+
+  @@map("pages")
+}
+
+// Sections within a file
+model Section {
+  id        String   @id @default(cuid())
+  pageId    String
+  name      String
+  startLine Int
+  endLine   Int
+  purpose   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  page    Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  prompts Prompt[]
+
+  @@map("sections")
+}
+
+// Prompts/Modification templates for each section
+model Prompt {
+  id           String   @id @default(cuid())
+  sectionId    String
+  template     String
+  example      String?
+  description  String?
+  lineNumber   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@map("prompts")
+}
+
+// State variables in a file
+model StateVar {
+  id          String   @id @default(cuid())
+  pageId      String
+  name        String
+  line        Int
+  type        String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@map("state_vars")
+}
+
+// Functions in a file
+model Function {
+  id         String   @id @default(cuid())
+  pageId     String
+  name       String
+  startLine  Int
+  endLine    Int
+  purpose    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@map("functions")
+}
+
+// Dependencies between files
+model Dependency {
+  id           String   @id @default(cuid())
+  fromPageId   String
+  toPageId     String
+  relationship String
+  createdAt    DateTime @default(now())
+
+  fromPage Page @relation("FromPage", fields: [fromPageId], references: [id], onDelete: Cascade)
+  toPage   Page @relation("ToPage", fields: [toPageId], references: [id], onDelete: Cascade)
+
+  @@map("dependencies")
+}
+
+// Master NLP prompt template for a page
+model MasterPrompt {
+  id              String   @id @default(cuid())
+  pageFilePath    String   @unique
+  nlpInstruction  String
+  sectionsSummary String
+  queryExamples   String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("master_prompts")
+}
