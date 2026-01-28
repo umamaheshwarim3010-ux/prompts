@@ -1,14 +1,14 @@
-import { prisma } from '@/lib/prisma'
-import { NextRequest, NextResponse } from 'next/server'
+const express = require('express');
+const { prisma } = require('../lib/prisma');
+
+const router = express.Router();
 
 // GET prompts for a specific section
-export async function GET(request: NextRequest) {
+router.get('/', async (req, res) => {
     try {
-        const { searchParams } = new URL(request.url)
-        const pageId = searchParams.get('pageId')
-        const sectionName = searchParams.get('section')
+        const { pageId, section: sectionName } = req.query;
 
-        let whereClause = {}
+        let whereClause = {};
 
         if (pageId && sectionName) {
             whereClause = {
@@ -16,13 +16,13 @@ export async function GET(request: NextRequest) {
                     pageId: pageId,
                     name: sectionName
                 }
-            }
+            };
         } else if (sectionName) {
             whereClause = {
                 section: {
                     name: sectionName
                 }
-            }
+            };
         }
 
         const prompts = await prisma.prompt.findMany({
@@ -39,11 +39,13 @@ export async function GET(request: NextRequest) {
                     }
                 }
             }
-        })
+        });
 
-        return NextResponse.json({ prompts })
+        res.json({ prompts });
     } catch (error) {
-        console.error('Error fetching prompts:', error)
-        return NextResponse.json({ error: 'Failed to fetch prompts' }, { status: 500 })
+        console.error('Error fetching prompts:', error);
+        res.status(500).json({ error: 'Failed to fetch prompts' });
     }
-}
+});
+
+module.exports = router;

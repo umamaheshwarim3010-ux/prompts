@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react'
 
+// API Base URL from environment variable
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+
 // --- Types ---
 interface Prompt {
     id: string
@@ -464,14 +467,14 @@ export default function Home() {
         setLoading(true)
         setError(null)
         try {
-            const response = await fetch('/api/pages')
+            const response = await fetch(`${API_URL}/api/pages`)
             if (!response.ok) throw new Error('Failed to fetch data')
             const data = await response.json()
             setPages(data.pages || [])
             setMasterPrompts(data.masterPrompts || [])
         } catch (err) {
             console.error('Fetch error:', err)
-            setError('Could not load data. Ensure the database is running and seeded.')
+            setError('Could not load data. Ensure the backend server is running.')
         } finally {
             setLoading(false)
         }
@@ -481,7 +484,7 @@ export default function Home() {
         setSeeding(true)
         setError(null)
         try {
-            const response = await fetch('/api/seed', { method: 'POST' })
+            const response = await fetch(`${API_URL}/api/seed`, { method: 'POST' })
             const data = await response.json()
             if (data.success) {
                 await fetchData()
@@ -503,7 +506,7 @@ export default function Home() {
             )
             setPages(updatedPages)
 
-            const res = await fetch('/api/save', {
+            const res = await fetch(`${API_URL}/api/save`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ pageId, content })
@@ -514,7 +517,7 @@ export default function Home() {
             await handleSeed()
 
             // Refresh selected page
-            const response = await fetch('/api/pages')
+            const response = await fetch(`${API_URL}/api/pages`)
             const data = await response.json()
             setPages(data.pages || [])
             const updatedPage = data.pages?.find((p: Page) => p.id === pageId)
@@ -550,17 +553,6 @@ export default function Home() {
                 p.filePath.toLowerCase().includes(q)
             )
     })
-
-    const downloadFile = (fileName: string, content: string | null) => {
-        if (!content) return
-        const element = document.createElement("a")
-        const file = new Blob([content], { type: 'text/plain' })
-        element.href = URL.createObjectURL(file)
-        element.download = fileName + ".txt"
-        document.body.appendChild(element)
-        element.click()
-        document.body.removeChild(element)
-    }
 
     return (
         <div className="min-h-screen text-slate-200 p-4 md:p-8 font-sans">
