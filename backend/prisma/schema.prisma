@@ -46,19 +46,27 @@ model Section {
 }
 
 // Prompts/Modification templates for each section
+// promptType: NLP (user-friendly) or DEVELOPER (technical)
 model Prompt {
-  id           String   @id @default(cuid())
+  id           String     @id @default(cuid())
   sectionId    String
   template     String
   example      String?
   description  String?
-  lineNumber   Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  lineNumber   Int        @default(0)
+  promptType   PromptType @default(NLP)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
   @@map("prompts")
+}
+
+// Enum for prompt types
+enum PromptType {
+  NLP        // User-friendly, natural language prompts
+  DEVELOPER  // Technical, concise developer prompts
 }
 
 // State variables in a file

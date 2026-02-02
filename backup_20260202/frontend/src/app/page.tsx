@@ -14,7 +14,6 @@ interface Prompt {
     example: string | null
     description: string | null
     lineNumber: number
-    promptType: 'NLP' | 'DEVELOPER'
 }
 
 interface Section {
@@ -375,276 +374,71 @@ const FileDetailView = ({ page, masterPrompt, onClose, onSave }: {
                         <span className="absolute left-2.5 sm:left-3 top-2.5 sm:top-3.5 text-slate-500 text-sm">🔍</span>
                     </div>
 
-                    {/* Sections - Grouped by NLP and Developer */}
+                    {/* Sections */}
                     {filteredSections.length > 0 ? (
-                        <div className="space-y-4 sm:space-y-6">
-                            {/* Group sections by type based on name */}
-                            {(() => {
-                                const nlpSections = filteredSections.filter(s =>
-                                    s.name.toUpperCase().includes('NLP') ||
-                                    s.name.toUpperCase().includes('USER-DEFINED') ||
-                                    s.name.toUpperCase().includes('USER DEFINED')
-                                )
-                                const devSections = filteredSections.filter(s =>
-                                    s.name.toUpperCase().includes('DEVELOPER') ||
-                                    s.name.toUpperCase().includes('DEV ') ||
-                                    s.name.toUpperCase().includes('TECHNICAL')
-                                )
-                                const otherSections = filteredSections.filter(s =>
-                                    !nlpSections.includes(s) && !devSections.includes(s)
-                                )
+                        <div className="space-y-2 sm:space-y-3">
+                            {filteredSections.map(section => {
+                                const isExpanded = expandedSections.has(section.id) || !!searchQuery
 
                                 return (
-                                    <>
-                                        {/* NLP Sections Group */}
-                                        {nlpSections.length > 0 && (
-                                            <div className="glass-panel rounded-xl sm:rounded-2xl overflow-hidden border-2 border-emerald-500/30">
-                                                {/* NLP Main Header */}
-                                                <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-900/40 to-emerald-800/20 border-b border-emerald-500/20">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                                                            <span className="text-xl sm:text-2xl">💬</span>
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="text-lg sm:text-xl font-bold text-emerald-300">NLP Prompts</h3>
-                                                            <p className="text-xs sm:text-sm text-emerald-400/70">User-friendly • Easy to Understand & Modify</p>
-                                                        </div>
-                                                        <div className="ml-auto text-right">
-                                                            <div className="text-lg sm:text-xl font-bold text-emerald-400">{nlpSections.reduce((sum, s) => sum + s.prompts.length, 0)}</div>
-                                                            <div className="text-[10px] sm:text-xs text-slate-500 uppercase">Prompts</div>
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                    <div key={section.id} className="glass-panel rounded-lg sm:rounded-xl overflow-hidden border border-white/5 hover:border-indigo-500/30 transition-colors">
+                                        <button
+                                            onClick={() => toggleSection(section.id)}
+                                            className="w-full flex items-center justify-between p-3 sm:p-4 bg-white/5 hover:bg-white/10 active:bg-white/15 transition-colors text-left"
+                                        >
+                                            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                                                <Badge color="blue">{section.name}</Badge>
+                                                <span className="text-[10px] sm:text-xs font-mono text-slate-500 hidden xs:inline">L{section.startLine}-{section.endLine}</span>
+                                            </div>
+                                            <div className="text-slate-400 text-xs sm:text-sm flex items-center gap-2">
+                                                <span className="hidden sm:inline text-xs opacity-50">{section.prompts.length} prompts</span>
+                                                <span className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
+                                            </div>
+                                        </button>
 
-                                                {/* NLP Sections Content */}
-                                                <div className="p-3 sm:p-4 space-y-3 sm:space-y-4 bg-emerald-950/20">
-                                                    {nlpSections.map(section => {
-                                                        const isExpanded = expandedSections.has(section.id) || !!searchQuery
-                                                        return (
-                                                            <div key={section.id} className="bg-black/30 rounded-lg sm:rounded-xl border border-emerald-500/10 overflow-hidden">
+                                        {isExpanded && (
+                                            <div className="p-3 sm:p-4 bg-black/20 space-y-2 sm:space-y-3 border-t border-white/5">
+                                                <p className="text-xs sm:text-sm text-slate-400 mb-3 sm:mb-4 italic border-l-2 border-indigo-500 pl-2 sm:pl-3">
+                                                    {section.purpose}
+                                                </p>
+
+                                                <div className="grid gap-2 sm:gap-3">
+                                                    {section.prompts.map(prompt => (
+                                                        <div key={prompt.id} className="group relative bg-slate-900/60 rounded-lg p-3 sm:p-4 border border-white/5 hover:border-indigo-500/50 transition-all">
+                                                            <div className="absolute right-2 top-2 flex items-center gap-1 sm:gap-2 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                                                                 <button
-                                                                    onClick={() => toggleSection(section.id)}
-                                                                    className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-emerald-900/20 transition-colors text-left"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        scrollToLine(prompt.lineNumber || 1)
+                                                                    }}
+                                                                    className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/40 border border-indigo-500/30 transition-colors"
+                                                                    title="Edit this prompt in the source file"
                                                                 >
-                                                                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                                                                        <Badge color="green">{section.name}</Badge>
-                                                                        <span className="text-[10px] sm:text-xs font-mono text-slate-500 hidden xs:inline">L{section.startLine}-{section.endLine}</span>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="text-xs text-emerald-400">{section.prompts.length} prompts</span>
-                                                                        <span className={`text-emerald-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
-                                                                    </div>
+                                                                    ✏️ <span className="hidden xs:inline">Edit</span>
                                                                 </button>
-
-                                                                {isExpanded && section.prompts.length > 0 && (
-                                                                    <div className="p-3 sm:p-4 border-t border-emerald-500/10 space-y-2 sm:space-y-3">
-                                                                        {section.purpose && section.purpose !== 'Section Purpose' && (
-                                                                            <p className="text-xs sm:text-sm text-slate-400 italic border-l-2 border-emerald-500/50 pl-2 sm:pl-3 mb-3">
-                                                                                {section.purpose}
-                                                                            </p>
-                                                                        )}
-                                                                        {section.prompts.map(prompt => (
-                                                                            <div key={prompt.id} className="group relative bg-emerald-950/40 rounded-lg p-3 sm:p-4 border border-emerald-500/10 hover:border-emerald-500/40 transition-all">
-                                                                                <div className="absolute right-2 top-2 flex items-center gap-1 sm:gap-2 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                                    <button
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation()
-                                                                                            scrollToLine(prompt.lineNumber || 1)
-                                                                                        }}
-                                                                                        className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/40 border border-emerald-500/30 transition-colors"
-                                                                                        title="Edit this prompt"
-                                                                                    >
-                                                                                        ✏️
-                                                                                    </button>
-                                                                                    <CopyButton text={prompt.template} />
-                                                                                </div>
-                                                                                <div className="pr-16 sm:pr-20">
-                                                                                    <span className="text-[9px] sm:text-[10px] uppercase font-bold text-emerald-500/60 tracking-wider">Line {prompt.lineNumber}</span>
-                                                                                    <div className="font-mono text-xs sm:text-sm text-emerald-200 mt-1 break-words leading-relaxed">{prompt.template}</div>
-                                                                                </div>
-                                                                                {prompt.example && (
-                                                                                    <div className="mt-2 pl-2 sm:pl-3 border-l-2 border-emerald-700/50">
-                                                                                        <span className="text-[9px] sm:text-[10px] uppercase font-bold text-slate-600 tracking-wider">Example</span>
-                                                                                        <div className="text-[10px] sm:text-xs text-slate-400 mt-0.5">{prompt.example}</div>
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
+                                                                <CopyButton text={prompt.template} />
                                                             </div>
-                                                        )
-                                                    })}
+                                                            <div className="mb-2 pr-16 sm:pr-24">
+                                                                <span className="text-[9px] sm:text-[10px] uppercase font-bold text-slate-600 tracking-wider flex items-center gap-1 sm:gap-2">
+                                                                    Template
+                                                                    <span className="text-slate-700 font-mono font-normal">Line {prompt.lineNumber}</span>
+                                                                </span>
+                                                                <div className="font-mono text-xs sm:text-sm text-indigo-300 mt-0.5 break-words">{prompt.template}</div>
+                                                            </div>
+                                                            {prompt.example && (
+                                                                <div className="mt-2 pl-2 sm:pl-3 border-l-2 border-slate-700">
+                                                                    <span className="text-[9px] sm:text-[10px] uppercase font-bold text-slate-600 tracking-wider">Example</span>
+                                                                    <div className="text-[10px] sm:text-xs text-slate-400 mt-0.5 break-words">{prompt.example}</div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             </div>
                                         )}
-
-                                        {/* Developer Sections Group */}
-                                        {devSections.length > 0 && (
-                                            <div className="glass-panel rounded-xl sm:rounded-2xl overflow-hidden border-2 border-purple-500/30">
-                                                {/* Developer Main Header */}
-                                                <div className="p-4 sm:p-5 bg-gradient-to-r from-purple-900/40 to-purple-800/20 border-b border-purple-500/20">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center shadow-lg shadow-purple-500/30">
-                                                            <span className="text-xl sm:text-2xl">⚙️</span>
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="text-lg sm:text-xl font-bold text-purple-300">Developer Prompts</h3>
-                                                            <p className="text-xs sm:text-sm text-purple-400/70">Technical & Precise • Code-focused</p>
-                                                        </div>
-                                                        <div className="ml-auto text-right">
-                                                            <div className="text-lg sm:text-xl font-bold text-purple-400">{devSections.reduce((sum, s) => sum + s.prompts.length, 0)}</div>
-                                                            <div className="text-[10px] sm:text-xs text-slate-500 uppercase">Prompts</div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Developer Sections Content */}
-                                                <div className="p-3 sm:p-4 space-y-3 sm:space-y-4 bg-purple-950/20">
-                                                    {devSections.map(section => {
-                                                        const isExpanded = expandedSections.has(section.id) || !!searchQuery
-                                                        return (
-                                                            <div key={section.id} className="bg-black/30 rounded-lg sm:rounded-xl border border-purple-500/10 overflow-hidden">
-                                                                <button
-                                                                    onClick={() => toggleSection(section.id)}
-                                                                    className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-purple-900/20 transition-colors text-left"
-                                                                >
-                                                                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                                                                        <Badge color="purple">{section.name}</Badge>
-                                                                        <span className="text-[10px] sm:text-xs font-mono text-slate-500 hidden xs:inline">L{section.startLine}-{section.endLine}</span>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="text-xs text-purple-400">{section.prompts.length} prompts</span>
-                                                                        <span className={`text-purple-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
-                                                                    </div>
-                                                                </button>
-
-                                                                {isExpanded && section.prompts.length > 0 && (
-                                                                    <div className="p-3 sm:p-4 border-t border-purple-500/10 space-y-2 sm:space-y-3">
-                                                                        {section.purpose && section.purpose !== 'Section Purpose' && (
-                                                                            <p className="text-xs sm:text-sm text-slate-400 italic border-l-2 border-purple-500/50 pl-2 sm:pl-3 mb-3">
-                                                                                {section.purpose}
-                                                                            </p>
-                                                                        )}
-                                                                        {section.prompts.map(prompt => (
-                                                                            <div key={prompt.id} className="group relative bg-purple-950/40 rounded-lg p-3 sm:p-4 border border-purple-500/10 hover:border-purple-500/40 transition-all">
-                                                                                <div className="absolute right-2 top-2 flex items-center gap-1 sm:gap-2 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                                    <button
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation()
-                                                                                            scrollToLine(prompt.lineNumber || 1)
-                                                                                        }}
-                                                                                        className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/40 border border-purple-500/30 transition-colors"
-                                                                                        title="Edit this prompt"
-                                                                                    >
-                                                                                        ✏️
-                                                                                    </button>
-                                                                                    <CopyButton text={prompt.template} />
-                                                                                </div>
-                                                                                <div className="pr-16 sm:pr-20">
-                                                                                    <span className="text-[9px] sm:text-[10px] uppercase font-bold text-purple-500/60 tracking-wider">Line {prompt.lineNumber}</span>
-                                                                                    <div className="font-mono text-xs sm:text-sm text-purple-200 mt-1 break-words leading-relaxed">{prompt.template}</div>
-                                                                                </div>
-                                                                                {prompt.example && (
-                                                                                    <div className="mt-2 pl-2 sm:pl-3 border-l-2 border-purple-700/50">
-                                                                                        <span className="text-[9px] sm:text-[10px] uppercase font-bold text-slate-600 tracking-wider">Example</span>
-                                                                                        <div className="text-[10px] sm:text-xs text-slate-400 mt-0.5">{prompt.example}</div>
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        )
-                                                    })}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Other Sections (not matching NLP or Developer) */}
-                                        {otherSections.length > 0 && (
-                                            <div className="glass-panel rounded-xl sm:rounded-2xl overflow-hidden border border-white/10">
-                                                <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-800/40 to-slate-700/20 border-b border-white/10">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-slate-500 to-slate-600 flex items-center justify-center shadow-lg shadow-slate-500/30">
-                                                            <span className="text-xl sm:text-2xl">📋</span>
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="text-lg sm:text-xl font-bold text-slate-300">Other Sections</h3>
-                                                            <p className="text-xs sm:text-sm text-slate-400/70">Additional prompts & content</p>
-                                                        </div>
-                                                        <div className="ml-auto text-right">
-                                                            <div className="text-lg sm:text-xl font-bold text-slate-400">{otherSections.reduce((sum, s) => sum + s.prompts.length, 0)}</div>
-                                                            <div className="text-[10px] sm:text-xs text-slate-500 uppercase">Prompts</div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
-                                                    {otherSections.map(section => {
-                                                        const isExpanded = expandedSections.has(section.id) || !!searchQuery
-                                                        return (
-                                                            <div key={section.id} className="bg-black/30 rounded-lg sm:rounded-xl border border-white/5 overflow-hidden">
-                                                                <button
-                                                                    onClick={() => toggleSection(section.id)}
-                                                                    className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-white/5 transition-colors text-left"
-                                                                >
-                                                                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                                                                        <Badge color="blue">{section.name}</Badge>
-                                                                        <span className="text-[10px] sm:text-xs font-mono text-slate-500 hidden xs:inline">L{section.startLine}-{section.endLine}</span>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="text-xs text-slate-400">{section.prompts.length} prompts</span>
-                                                                        <span className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
-                                                                    </div>
-                                                                </button>
-
-                                                                {isExpanded && section.prompts.length > 0 && (
-                                                                    <div className="p-3 sm:p-4 border-t border-white/5 space-y-2 sm:space-y-3">
-                                                                        {section.purpose && section.purpose !== 'Section Purpose' && (
-                                                                            <p className="text-xs sm:text-sm text-slate-400 italic border-l-2 border-indigo-500/50 pl-2 sm:pl-3 mb-3">
-                                                                                {section.purpose}
-                                                                            </p>
-                                                                        )}
-                                                                        {section.prompts.map(prompt => (
-                                                                            <div key={prompt.id} className="group relative bg-slate-900/50 rounded-lg p-3 sm:p-4 border border-white/5 hover:border-indigo-500/40 transition-all">
-                                                                                <div className="absolute right-2 top-2 flex items-center gap-1 sm:gap-2 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                                    <button
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation()
-                                                                                            scrollToLine(prompt.lineNumber || 1)
-                                                                                        }}
-                                                                                        className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/40 border border-indigo-500/30 transition-colors"
-                                                                                        title="Edit this prompt"
-                                                                                    >
-                                                                                        ✏️
-                                                                                    </button>
-                                                                                    <CopyButton text={prompt.template} />
-                                                                                </div>
-                                                                                <div className="pr-16 sm:pr-20">
-                                                                                    <span className="text-[9px] sm:text-[10px] uppercase font-bold text-slate-500/60 tracking-wider">Line {prompt.lineNumber}</span>
-                                                                                    <div className="font-mono text-xs sm:text-sm text-slate-200 mt-1 break-words leading-relaxed">{prompt.template}</div>
-                                                                                </div>
-                                                                                {prompt.example && (
-                                                                                    <div className="mt-2 pl-2 sm:pl-3 border-l-2 border-slate-700">
-                                                                                        <span className="text-[9px] sm:text-[10px] uppercase font-bold text-slate-600 tracking-wider">Example</span>
-                                                                                        <div className="text-[10px] sm:text-xs text-slate-400 mt-0.5">{prompt.example}</div>
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        )
-                                                    })}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </>
+                                    </div>
                                 )
-                            })()}
+                            })}
                         </div>
                     ) : (
                         <div className="glass-panel rounded-lg sm:rounded-xl p-8 sm:p-12 text-center text-slate-400">
