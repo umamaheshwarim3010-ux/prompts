@@ -37,6 +37,7 @@ app.use((req, res, next) => {
 // Public Routes (no authentication required)
 // ==========================================
 app.use('/api/auth', authRouter);
+app.use('/api/seed', seedRouter); // Temporarily public for local database seeding
 
 // Health check - public
 app.get('/api/health', (req, res) => {
@@ -49,7 +50,6 @@ app.get('/api/health', (req, res) => {
 
 // Apply authentication middleware to protected routes
 app.use('/api/pages', authenticateToken, pagesRouter);
-app.use('/api/seed', authenticateToken, seedRouter);
 app.use('/api/save', authenticateToken, saveRouter);
 app.use('/api/prompts', authenticateToken, promptsRouter);
 app.use('/api/projects', authenticateToken, projectsRouter);

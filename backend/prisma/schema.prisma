@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -15,7 +15,7 @@ model Page {
   totalLines    Int
   purpose       String
   promptFilePath String?   // Path to the source .txt file
-  rawContent    String?   @db.Text // Store the full original text content
+  rawContent    String?   // Store the full original text content
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

@@ -104,10 +104,10 @@ const Badge = ({ children, color = 'blue' }: { children: React.ReactNode, color?
 }
 
 // Folder Card Component
-const FolderCard = ({ folderName, pages, onSelectFile, isExpanded, onToggle }: {
+const FolderCard = ({ folderName, pages, onNavigateToFile, isExpanded, onToggle }: {
     folderName: string
     pages: Page[]
-    onSelectFile: (page: Page) => void
+    onNavigateToFile: (pageId: string) => void
     isExpanded: boolean
     onToggle: () => void
 }) => {
@@ -183,7 +183,7 @@ const FolderCard = ({ folderName, pages, onSelectFile, isExpanded, onToggle }: {
                         {pages.map((page) => (
                             <button
                                 key={page.id}
-                                onClick={() => onSelectFile(page)}
+                                onClick={() => onNavigateToFile(page.id)}
                                 className="w-full flex items-center justify-between p-3 sm:p-4 rounded-lg sm:rounded-xl bg-slate-900/50 hover:bg-slate-800/70 active:bg-slate-800/90 border border-white/5 hover:border-indigo-500/30 transition-all group"
                             >
                                 <div className="flex items-center gap-2 sm:gap-4 min-w-0">
@@ -665,7 +665,6 @@ export default function Home() {
     const [error, setError] = useState<string | null>(null)
     const [seeding, setSeeding] = useState(false)
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
-    const [selectedPage, setSelectedPage] = useState<Page | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
 
     useEffect(() => {
@@ -729,40 +728,16 @@ export default function Home() {
         }
     }
 
-    const handleSave = async (pageId: string, content: string) => {
-        try {
-            const updatedPages = pages.map(p =>
-                p.id === pageId ? { ...p, rawContent: content } : p
-            )
-            setPages(updatedPages)
-
-            const saveResult = await apiRequest('/api/save', {
-                method: 'POST',
-                body: { pageId, content }
-            })
-
-            if (!saveResult.success) throw new Error('Save failed')
-
-            await handleSeed()
-
-            // Refresh selected page
-            const pagesResult = await apiRequest<{ pages: Page[] }>('/api/pages')
-            if (pagesResult.success && pagesResult.data?.pages) {
-                setPages(pagesResult.data.pages)
-                const updatedPage = pagesResult.data.pages.find((p: Page) => p.id === pageId)
-                if (updatedPage) setSelectedPage(updatedPage)
-            }
-        } catch (e) {
-            console.error(e)
-            alert('Failed to save changes')
-        }
-    }
-
     const toggleFolder = (folderName: string) => {
         const next = new Set(expandedFolders)
         if (next.has(folderName)) next.delete(folderName)
         else next.add(folderName)
         setExpandedFolders(next)
+    }
+
+    // Navigate to prompt detail page
+    const navigateToPrompt = (pageId: string) => {
+        router.push(`/prompt/${pageId}`)
     }
 
     // Group pages by folder
@@ -896,22 +871,13 @@ export default function Home() {
                                 pages={folderPages}
                                 isExpanded={expandedFolders.has(folderName) || !!searchQuery}
                                 onToggle={() => toggleFolder(folderName)}
-                                onSelectFile={(page) => setSelectedPage(page)}
+                                onNavigateToFile={navigateToPrompt}
                             />
                         ))}
                     </div>
                 )}
             </main>
-
-            {/* File Detail Modal */}
-            {selectedPage && (
-                <FileDetailView
-                    page={selectedPage}
-                    masterPrompt={masterPrompts.find(m => m.pageFilePath === selectedPage.filePath)}
-                    onClose={() => setSelectedPage(null)}
-                    onSave={handleSave}
-                />
-            )}
         </div>
     )
 }
+
