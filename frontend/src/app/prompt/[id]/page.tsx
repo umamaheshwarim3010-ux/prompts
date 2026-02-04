@@ -392,24 +392,58 @@ export default function PromptDetailPage() {
                 {/* Editor */}
                 {isEditing && page.rawContent && (
                     <div className="glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
-                            <div className="flex items-center gap-2">
-                                <span className="text-emerald-400">✏️</span>
-                                <span className="text-sm sm:text-base font-medium text-white">Editing {page.componentName}.txt</span>
-                            </div>
-                            <button
-                                onClick={handleSave}
-                                disabled={saving}
-                                className="px-3 sm:px-4 py-1.5 sm:py-2 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-xs sm:text-sm rounded-lg font-bold shadow-lg shadow-green-500/20 active:scale-95 transition-all"
-                            >
-                                {saving ? '💾 Saving...' : '💾 Save & Reprocess'}
-                            </button>
-                        </div>
-                        <textarea
-                            id={`editor-${page.id}`}
-                            className="w-full h-[350px] sm:h-[450px] lg:h-[500px] bg-slate-900 text-slate-300 font-mono text-[10px] sm:text-xs p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-y border border-slate-700"
-                            defaultValue={page.rawContent}
-                        />
+                        {(() => {
+                            let editorContent = page.rawContent || ''
+                            let editorTitle = `Editing ${page.componentName}.txt`
+
+                            if (promptFilter === 'NLP') {
+                                if (page.rawContent) {
+                                    const lines = page.rawContent.split('\n')
+                                    editorContent = nlpSections
+                                        .sort((a, b) => a.startLine - b.startLine)
+                                        .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                        .join('\n\n')
+                                    editorTitle = 'Editing NLP Prompts (Read-only view)'
+                                }
+                            } else if (promptFilter === 'DEVELOPER') {
+                                if (page.rawContent) {
+                                    const lines = page.rawContent.split('\n')
+                                    editorContent = devSections
+                                        .sort((a, b) => a.startLine - b.startLine)
+                                        .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                        .join('\n\n')
+                                    editorTitle = 'Editing Developer Prompts (Read-only view)'
+                                }
+                            }
+
+                            return (
+                                <>
+                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-emerald-400">✏️</span>
+                                            <span className="text-sm sm:text-base font-medium text-white">{editorTitle}</span>
+                                        </div>
+                                        <button
+                                            onClick={handleSave}
+                                            disabled={saving || promptFilter !== 'ALL'}
+                                            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-lg font-bold shadow-lg transition-all ${promptFilter === 'ALL'
+                                                    ? 'bg-green-600 hover:bg-green-500 disabled:bg-green-800 shadow-green-500/20 active:scale-95'
+                                                    : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                                                }`}
+                                            title={promptFilter !== 'ALL' ? "Switch to 'PROMPTS' view to save changes" : "Save changes"}
+                                        >
+                                            {promptFilter === 'ALL' ? (saving ? '💾 Saving...' : '💾 Save & Reprocess') : '🔒 Switch to PROMPTS to Save'}
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        key={promptFilter}
+                                        id={`editor-${page.id}`}
+                                        className="w-full h-[350px] sm:h-[450px] lg:h-[500px] bg-slate-900 text-slate-300 font-mono text-[10px] sm:text-xs p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-y border border-slate-700"
+                                        defaultValue={editorContent}
+                                    />
+                                </>
+                            )
+                        })()}
                     </div>
                 )}
 
