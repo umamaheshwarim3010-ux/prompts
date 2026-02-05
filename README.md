@@ -77,7 +77,7 @@ npm run dev
 
 ```env
 DATABASE_URL="postgresql://..."
-PROJECT_ROOT=c:\SNIX\sify\HrAssist\exam
+PROJECT_ROOT=c:\your\project\path
 PORT=5000
 ```
 
