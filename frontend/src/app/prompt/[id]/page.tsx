@@ -62,7 +62,53 @@ interface MasterPrompt {
     queryExamples: string
 }
 
+// --- Constants ---
+const KEYWORDS = {
+    FRONTEND: ['frontend', 'ui', 'component', 'style', 'css', 'html', 'react', 'view', 'display', 'render', 'button', 'input', 'modal', 'page'],
+    BACKEND: ['backend', 'api', 'server', 'route', 'controller', 'service', 'node', 'express', 'endpoint', 'logic', 'handler', 'auth', 'middleware'],
+    DATABASE: ['database', 'db', 'sql', 'prisma', 'schema', 'model', 'query', 'table', 'migration', 'seed', 'entity']
+}
+
 // --- Components ---
+
+const SidePanel = ({
+    activeFilter,
+    onFilterChange
+}: {
+    activeFilter: 'FRONTEND' | 'BACKEND' | 'DATABASE' | null,
+    onFilterChange: (filter: 'FRONTEND' | 'BACKEND' | 'DATABASE' | null) => void
+}) => {
+    const buttons = [
+        { id: 'FRONTEND', label: 'FRONTEND', color: 'blue' },
+        { id: 'BACKEND', label: 'BACKEND', color: 'purple' },
+        { id: 'DATABASE', label: 'DATABASE', color: 'emerald' }
+    ] as const
+
+    return (
+        <div className="flex flex-col gap-2 p-2 bg-slate-900/50 rounded-xl border border-white/5 backdrop-blur-sm w-32">
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center mb-1">Filter</div>
+            {buttons.map((btn) => (
+                <button
+                    key={btn.id}
+                    onClick={() => onFilterChange(activeFilter === btn.id ? null : btn.id)}
+                    className={`
+                        px-3 py-2 rounded-lg text-xs font-bold transition-all duration-300 relative overflow-hidden group
+                        ${activeFilter === btn.id
+                            ? `bg-${btn.color}-500/20 text-${btn.color}-300 border border-${btn.color}-500/50 shadow-lg shadow-${btn.color}-500/10`
+                            : activeFilter
+                                ? 'bg-slate-800/30 text-slate-600 border border-transparent' // Dimmed state when other active
+                                : 'bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-700 border border-white/5'
+                        }
+                    `}
+                >
+                    {/* Hover Glow Effect */}
+                    <div className={`absolute inset-0 bg-gradient-to-r from-${btn.color}-500/0 via-${btn.color}-500/10 to-${btn.color}-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000`} />
+                    <span className="relative z-10">{btn.label}</span>
+                </button>
+            ))}
+        </div>
+    )
+}
 
 const CopyButton = ({ text }: { text: string }) => {
     const [copied, setCopied] = useState(false)
@@ -117,6 +163,7 @@ export default function PromptDetailPage() {
     const [searchQuery, setSearchQuery] = useState('')
     const [saving, setSaving] = useState(false)
     const [promptFilter, setPromptFilter] = useState<'BOTH' | 'NLP' | 'DEVELOPER'>('NLP')
+    const [focusedFilter, setFocusedFilter] = useState<'FRONTEND' | 'BACKEND' | 'DATABASE' | null>(null)
 
     useEffect(() => {
         const token = getAccessToken()
@@ -448,107 +495,157 @@ export default function PromptDetailPage() {
                 )}
 
                 {/* Content View - Text Based */}
-                {(() => {
-                    // For BOTH view - show side-by-side columns
-                    if (promptFilter === 'BOTH') {
-                        const lines = page.rawContent?.split('\n') || []
-                        const nlpContent = nlpSections
-                            .sort((a, b) => a.startLine - b.startLine)
-                            .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                            .join('\n\n')
-                        const devContent = devSections
-                            .sort((a, b) => a.startLine - b.startLine)
-                            .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                            .join('\n\n')
+                <div className="flex flex-col md:flex-row gap-4 items-start relative">
+                    {/* Side Panel - Sticky */}
+                    <div className="hidden md:block sticky top-24 z-10">
+                        <SidePanel activeFilter={focusedFilter} onFilterChange={setFocusedFilter} />
+                    </div>
 
-                        if (!nlpContent && !devContent) {
+                    <div className="flex-1 min-w-0 w-full">
+                        {(() => {
+                            // Helper to render content with highlighting
+                            const renderHighlightedContent = (content: string | null | undefined, type: 'NLP' | 'DEV') => {
+                                if (!content) return <span className="text-slate-500 italic">No {type} content found</span>
+
+                                return content.split('\n').map((line, i) => {
+                                    // Identify content type based on keywords if a filter is active
+                                    let isMatch = false
+                                    let lineClass = 'highlight-line block min-h-[1.2em] '
+
+                                    if (focusedFilter) {
+                                        const lowerLine = line.toLowerCase()
+                                        // Check for explicit tags first (e.g., [FRONTEND]) or keywords
+                                        const keywords = KEYWORDS[focusedFilter]
+
+                                        // Simple match: if line contains any keyword
+                                        // We might want to be stricter, but for now specific keywords work best
+                                        isMatch = keywords.some(k => lowerLine.includes(k)) ||
+                                            lowerLine.includes(`[${focusedFilter.toLowerCase()}]`)
+
+                                        if (isMatch) {
+                                            lineClass += `highlight-${focusedFilter.toLowerCase()} font-medium `
+                                        } else {
+                                            lineClass += 'highlight-dimmed '
+                                        }
+                                    }
+
+                                    return (
+                                        <span key={i} className={lineClass}>
+                                            {line}
+                                        </span>
+                                    )
+                                })
+                            }
+                            // For BOTH view - show side-by-side columns
+                            if (promptFilter === 'BOTH') {
+                                const lines = page.rawContent?.split('\n') || []
+                                const nlpContent = nlpSections
+                                    .sort((a, b) => a.startLine - b.startLine)
+                                    .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                    .join('\n\n')
+                                const devContent = devSections
+                                    .sort((a, b) => a.startLine - b.startLine)
+                                    .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                    .join('\n\n')
+
+                                if (!nlpContent && !devContent) {
+                                    return (
+                                        <div className="glass-panel rounded-xl sm:rounded-2xl p-12 text-center text-slate-400">
+                                            <p>No content found for this section.</p>
+                                        </div>
+                                    )
+                                }
+
+                                return (
+                                    <div className="glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6 overflow-hidden">
+                                        {/* Two-column layout for BOTH view */}
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                            {/* NLP Column */}
+                                            <div className="flex flex-col">
+                                                <div className="flex justify-between items-center mb-3 pb-2 border-b border-emerald-500/30">
+                                                    <h3 className="text-sm sm:text-base font-semibold text-emerald-400 flex items-center gap-2">
+                                                        <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                                                        NLP Prompt
+                                                    </h3>
+                                                    <CopyButton text={nlpContent} />
+                                                </div>
+                                                <div className="bg-slate-900/50 rounded-lg border border-slate-700/50 overflow-hidden" style={{ height: '600px' }}>
+                                                    <pre className="text-slate-300 font-mono text-[10px] sm:text-xs p-4 whitespace-pre-wrap h-full overflow-y-auto custom-scrollbar">
+                                                        {renderHighlightedContent(nlpContent, 'NLP')}
+                                                    </pre>
+                                                </div>
+                                            </div>
+
+                                            {/* Developer Column */}
+                                            <div className="flex flex-col">
+                                                <div className="flex justify-between items-center mb-3 pb-2 border-b border-purple-500/30">
+                                                    <h3 className="text-sm sm:text-base font-semibold text-purple-400 flex items-center gap-2">
+                                                        <span className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
+                                                        Developer Prompt
+                                                    </h3>
+                                                    <CopyButton text={devContent} />
+                                                </div>
+                                                <div className="bg-slate-900/50 rounded-lg border border-slate-700/50 overflow-hidden" style={{ height: '600px' }}>
+                                                    <pre className="text-slate-300 font-mono text-[10px] sm:text-xs p-4 whitespace-pre-wrap h-full overflow-y-auto custom-scrollbar">
+                                                        {renderHighlightedContent(devContent, 'DEV')}
+                                                    </pre>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            }
+
+                            // For NLP or DEVELOPER individual views - show single column
+                            let contentToDisplay = ''
+
+                            if (promptFilter === 'NLP') {
+                                if (page.rawContent) {
+                                    const lines = page.rawContent.split('\n')
+                                    contentToDisplay = nlpSections
+                                        .sort((a, b) => a.startLine - b.startLine)
+                                        .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                        .join('\n\n')
+                                }
+                            } else if (promptFilter === 'DEVELOPER') {
+                                if (page.rawContent) {
+                                    const lines = page.rawContent.split('\n')
+                                    contentToDisplay = devSections
+                                        .sort((a, b) => a.startLine - b.startLine)
+                                        .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                        .join('\n\n')
+                                }
+                            }
+
+                            if (!contentToDisplay) {
+                                return (
+                                    <div className="glass-panel rounded-xl sm:rounded-2xl p-12 text-center text-slate-400">
+                                        <p>No content found for this section.</p>
+                                    </div>
+                                )
+                            }
+
+
+                            // Single Column View (NLP or DEVELOPER)
                             return (
-                                <div className="glass-panel rounded-xl sm:rounded-2xl p-12 text-center text-slate-400">
-                                    <p>No content found for this section.</p>
+                                <div className="glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6 overflow-hidden">
+                                    <div className="flex justify-between items-center mb-2">
+                                        {/* Mobile Toggle for Filter (if we wanted one, but SidePanel handles it largely) */}
+                                        <div className="md:hidden">
+                                            <SidePanel activeFilter={focusedFilter} onFilterChange={setFocusedFilter} />
+                                        </div>
+                                        <div className="ml-auto">
+                                            <CopyButton text={contentToDisplay} />
+                                        </div>
+                                    </div>
+                                    <pre className="bg-slate-900/50 text-slate-300 font-mono text-[10px] sm:text-xs p-4 rounded-lg overflow-x-auto whitespace-pre-wrap border border-slate-700/50 h-[calc(100vh-300px)] custom-scrollbar">
+                                        {renderHighlightedContent(contentToDisplay, promptFilter === 'NLP' ? 'NLP' : 'DEV')}
+                                    </pre>
                                 </div>
                             )
-                        }
-
-                        return (
-                            <div className="glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6 overflow-hidden">
-                                {/* Two-column layout for BOTH view */}
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                    {/* NLP Column */}
-                                    <div className="flex flex-col">
-                                        <div className="flex justify-between items-center mb-3 pb-2 border-b border-emerald-500/30">
-                                            <h3 className="text-sm sm:text-base font-semibold text-emerald-400 flex items-center gap-2">
-                                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-                                                NLP Prompt
-                                            </h3>
-                                            <CopyButton text={nlpContent} />
-                                        </div>
-                                        <div className="bg-slate-900/50 rounded-lg border border-slate-700/50 overflow-hidden" style={{ height: '600px' }}>
-                                            <pre className="text-slate-300 font-mono text-[10px] sm:text-xs p-4 whitespace-pre-wrap h-full overflow-y-auto">
-                                                {nlpContent || <span className="text-slate-500 italic">No NLP content found</span>}
-                                            </pre>
-                                        </div>
-                                    </div>
-
-                                    {/* Developer Column */}
-                                    <div className="flex flex-col">
-                                        <div className="flex justify-between items-center mb-3 pb-2 border-b border-purple-500/30">
-                                            <h3 className="text-sm sm:text-base font-semibold text-purple-400 flex items-center gap-2">
-                                                <span className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
-                                                Developer Prompt
-                                            </h3>
-                                            <CopyButton text={devContent} />
-                                        </div>
-                                        <div className="bg-slate-900/50 rounded-lg border border-slate-700/50 overflow-hidden" style={{ height: '600px' }}>
-                                            <pre className="text-slate-300 font-mono text-[10px] sm:text-xs p-4 whitespace-pre-wrap h-full overflow-y-auto">
-                                                {devContent || <span className="text-slate-500 italic">No Developer content found</span>}
-                                            </pre>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )
-                    }
-
-                    // For NLP or DEVELOPER individual views - show single column
-                    let contentToDisplay = ''
-
-                    if (promptFilter === 'NLP') {
-                        if (page.rawContent) {
-                            const lines = page.rawContent.split('\n')
-                            contentToDisplay = nlpSections
-                                .sort((a, b) => a.startLine - b.startLine)
-                                .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                                .join('\n\n')
-                        }
-                    } else if (promptFilter === 'DEVELOPER') {
-                        if (page.rawContent) {
-                            const lines = page.rawContent.split('\n')
-                            contentToDisplay = devSections
-                                .sort((a, b) => a.startLine - b.startLine)
-                                .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                                .join('\n\n')
-                        }
-                    }
-
-                    if (!contentToDisplay) {
-                        return (
-                            <div className="glass-panel rounded-xl sm:rounded-2xl p-12 text-center text-slate-400">
-                                <p>No content found for this section.</p>
-                            </div>
-                        )
-                    }
-
-                    return (
-                        <div className="glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6 overflow-hidden">
-                            <div className="flex justify-end mb-2">
-                                <CopyButton text={contentToDisplay} />
-                            </div>
-                            <pre className="bg-slate-900/50 text-slate-300 font-mono text-[10px] sm:text-xs p-4 rounded-lg overflow-x-auto whitespace-pre-wrap border border-slate-700/50">
-                                {contentToDisplay}
-                            </pre>
-                        </div>
-                    )
-                })()}
+                        })()}
+                    </div>
+                </div>
             </main>
         </div>
     )
