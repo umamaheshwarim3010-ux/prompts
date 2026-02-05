@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiRequest, getAccessToken, clearAuthData } from '@/lib/api'
+import ThemeToggle from '@/components/ThemeToggle'
 
 // API Base URL from environment variable
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
@@ -808,6 +809,9 @@ export default function Home() {
                         >
                             {seeding ? 'Syncing...' : <><span className="hidden xs:inline">🔄</span> Sync All Prompts</>}
                         </button>
+
+                        {/* Theme Toggle */}
+                        <ThemeToggle />
                     </div>
                 </div>
             </header>
