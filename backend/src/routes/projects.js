@@ -273,4 +273,93 @@ router.get('/browse', async (req, res) => {
     }
 });
 
+// Resolve folder path by name (search common directories)
+router.post('/resolve-path', async (req, res) => {
+    try {
+        const { folderName, hintPaths } = req.body;
+
+        if (!folderName) {
+            return res.status(400).json({
+                success: false,
+                message: 'Folder name is required'
+            });
+        }
+
+        // Common Windows directories to search
+        const userProfile = process.env.USERPROFILE || 'C:/Users/Default';
+        const searchPaths = [
+            path.join(userProfile, 'Desktop'),
+            path.join(userProfile, 'Documents'),
+            path.join(userProfile, 'Downloads'),
+            userProfile,
+            'C:/',
+            'D:/',
+            ...(hintPaths || [])
+        ];
+
+        // Recursive function to search for folder
+        const searchForFolder = (basePath, targetName, maxDepth = 3, currentDepth = 0) => {
+            if (currentDepth > maxDepth) return null;
+
+            try {
+                if (!fs.existsSync(basePath)) return null;
+
+                const stats = fs.statSync(basePath);
+                if (!stats.isDirectory()) return null;
+
+                const items = fs.readdirSync(basePath, { withFileTypes: true });
+
+                // First, check direct children
+                for (const item of items) {
+                    if (item.isDirectory() && item.name === targetName) {
+                        const fullPath = path.join(basePath, item.name);
+                        return fullPath;
+                    }
+                }
+
+                // If not found in direct children and we haven't reached max depth, search subdirectories
+                if (currentDepth < maxDepth) {
+                    for (const item of items) {
+                        if (item.isDirectory() && !item.name.startsWith('.')) {
+                            const subPath = path.join(basePath, item.name);
+                            const result = searchForFolder(subPath, targetName, maxDepth, currentDepth + 1);
+                            if (result) return result;
+                        }
+                    }
+                }
+            } catch (error) {
+                // Skip directories we don't have permission to read
+                return null;
+            }
+
+            return null;
+        };
+
+        // Search in all common paths
+        let foundPath = null;
+        for (const searchPath of searchPaths) {
+            foundPath = searchForFolder(searchPath, folderName);
+            if (foundPath) break;
+        }
+
+        if (foundPath) {
+            res.json({
+                success: true,
+                absolutePath: foundPath.replace(/\\/g, '/')
+            });
+        } else {
+            res.status(404).json({
+                success: false,
+                message: `Could not find folder "${folderName}" in common directories. Please enter the full path manually.`
+            });
+        }
+    } catch (error) {
+        console.error('Error resolving path:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to resolve folder path'
+        });
+    }
+});
+
 module.exports = router;
