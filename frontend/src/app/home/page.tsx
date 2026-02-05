@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getAccessToken, getStoredUser, verifyToken, logout, apiRequest, clearAuthData } from '@/lib/api';
-import { ThemeToggle } from '@/components/ThemeToggle';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -38,13 +37,9 @@ export default function HomePage() {
     const [newProjectName, setNewProjectName] = useState('');
     const [newProjectDescription, setNewProjectDescription] = useState('');
     const [selectedPath, setSelectedPath] = useState('');
-    const [browsing, setBrowsing] = useState(false);
-    const [currentBrowsePath, setCurrentBrowsePath] = useState('C:/');
-    const [directories, setDirectories] = useState<DirectoryItem[]>([]);
-    const [browseLoading, setBrowseLoading] = useState(false);
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState('');
-    const [browseHistory, setBrowseHistory] = useState<string[]>([]);
+    const [pathResolving, setPathResolving] = useState(false);
 
     useEffect(() => {
         checkAuth();
@@ -109,48 +104,56 @@ export default function HomePage() {
         }
     };
 
-    const browseDirectory = async (path: string, addToHistory: boolean = true) => {
-        setBrowseLoading(true);
+    const handleNativeFolderPicker = async () => {
         try {
-            const result = await apiRequest(`/api/projects/browse?path=${encodeURIComponent(path)}`);
+            // Check if File System Access API is supported
+            if ('showDirectoryPicker' in window) {
+                setError('');
+                setPathResolving(true);
 
-            if (result.success && result.data?.success) {
-                // Add current path to history before navigating (if not going back)
-                if (addToHistory && currentBrowsePath && currentBrowsePath !== path) {
-                    setBrowseHistory(prev => [...prev, currentBrowsePath]);
+                // Open native folder picker
+                const dirHandle = await (window as any).showDirectoryPicker({
+                    mode: 'read',
+                });
+
+                if (dirHandle) {
+                    const folderName = dirHandle.name;
+
+                    // Try to resolve the full path using backend
+                    const result = await apiRequest('/api/projects/resolve-path', {
+                        method: 'POST',
+                        body: {
+                            folderName: folderName
+                        }
+                    });
+
+                    if (result.success && result.data?.success && result.data.absolutePath) {
+                        setSelectedPath(result.data.absolutePath);
+
+                        // Auto-fill project name if empty
+                        if (!newProjectName) {
+                            setNewProjectName(folderName.charAt(0).toUpperCase() + folderName.slice(1));
+                        }
+                    } else {
+                        // If path resolution fails, show the folder name and ask user to enter full path
+                        setError(`Selected folder: "${folderName}". Could not auto-resolve path. Please enter the full path manually.`);
+                        if (!newProjectName) {
+                            setNewProjectName(folderName.charAt(0).toUpperCase() + folderName.slice(1));
+                        }
+                    }
                 }
-                setCurrentBrowsePath(result.data.currentPath);
-                setDirectories(result.data.directories);
+            } else {
+                // Fallback for unsupported browsers
+                setError('Your browser does not support the native folder picker. Please enter the folder path manually. (Supported in Chrome/Edge 86+)');
             }
-        } catch (err) {
-            console.error('Error browsing directory:', err);
+        } catch (err: any) {
+            // User cancelled or error occurred
+            if (err.name !== 'AbortError') {
+                console.error('Error selecting folder:', err);
+                setError('Failed to select folder. Please enter the path manually.');
+            }
         } finally {
-            setBrowseLoading(false);
-        }
-    };
-
-    const openBrowser = () => {
-        setBrowsing(true);
-        setBrowseHistory([]); // Reset history when opening browser
-        browseDirectory(currentBrowsePath, false);
-    };
-
-    const goBack = () => {
-        if (browseHistory.length > 0) {
-            const previousPath = browseHistory[browseHistory.length - 1];
-            setBrowseHistory(prev => prev.slice(0, -1)); // Remove last item
-            browseDirectory(previousPath, false); // Don't add to history when going back
-        }
-    };
-
-    const selectDirectory = (path: string) => {
-        setSelectedPath(path);
-        setBrowsing(false);
-        setBrowseHistory([]); // Clear history when selecting
-        // Auto-fill project name if empty
-        if (!newProjectName) {
-            const folderName = path.split('/').pop() || 'New Project';
-            setNewProjectName(folderName.charAt(0).toUpperCase() + folderName.slice(1));
+            setPathResolving(false);
         }
     };
 
@@ -284,9 +287,6 @@ export default function HomePage() {
                                 </svg>
                                 <span className="hidden sm:inline">Logout</span>
                             </button>
-
-                            {/* Theme Toggle */}
-                            <ThemeToggle />
                         </div>
                     </div>
                 </header>
@@ -345,91 +345,21 @@ export default function HomePage() {
                                                 className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-white/5 border border-white/10 rounded-lg sm:rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-mono text-xs sm:text-sm"
                                             />
                                             <button
-                                                onClick={openBrowser}
-                                                className="px-3 sm:px-4 py-2.5 sm:py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg sm:rounded-xl transition-all flex items-center justify-center gap-2"
+                                                onClick={handleNativeFolderPicker}
+                                                disabled={pathResolving}
+                                                className="px-3 sm:px-4 py-2.5 sm:py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg sm:rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
-                                                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                                                </svg>
-                                                <span className="text-sm">Browse</span>
+                                                {pathResolving ? (
+                                                    <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                ) : (
+                                                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                                    </svg>
+                                                )}
+                                                <span className="text-sm">{pathResolving ? 'Resolving...' : 'Browse'}</span>
                                             </button>
                                         </div>
                                     </div>
-
-                                    {/* Directory Browser */}
-                                    {browsing && (
-                                        <div className="bg-black/30 rounded-lg sm:rounded-xl border border-white/10 overflow-hidden">
-                                            <div className="p-2 sm:p-3 bg-white/5 border-b border-white/10 flex items-center justify-between gap-2">
-                                                <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-400 font-mono overflow-hidden">
-                                                    <span className="flex-shrink-0">📂</span>
-                                                    <span className="truncate">{currentBrowsePath}</span>
-                                                </div>
-                                                <button
-                                                    onClick={goBack}
-                                                    disabled={browseHistory.length === 0}
-                                                    className={`px-2 sm:px-3 py-1 rounded-lg text-xs sm:text-sm transition-colors flex-shrink-0 flex items-center gap-1.5 ${browseHistory.length > 0
-                                                        ? 'bg-white/5 hover:bg-white/10 text-gray-300'
-                                                        : 'bg-white/5 text-gray-600 cursor-not-allowed'
-                                                        }`}
-                                                >
-                                                    <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                                    </svg>
-                                                    Back
-                                                </button>
-                                            </div>
-                                            <div className="max-h-48 sm:max-h-60 overflow-y-auto p-2">
-                                                {browseLoading ? (
-                                                    <div className="flex justify-center py-6 sm:py-8">
-                                                        <div className="w-6 h-6 sm:w-8 sm:h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin"></div>
-                                                    </div>
-                                                ) : directories.length === 0 ? (
-                                                    <div className="text-center py-6 sm:py-8 text-gray-500 text-sm">
-                                                        No subdirectories found
-                                                    </div>
-                                                ) : (
-                                                    <div className="space-y-1">
-                                                        {directories.map((dir) => (
-                                                            <div
-                                                                key={dir.path}
-                                                                className="flex items-center justify-between p-2 sm:p-3 rounded-lg hover:bg-white/5 active:bg-white/10 transition-colors group"
-                                                            >
-                                                                <button
-                                                                    onClick={() => browseDirectory(dir.path)}
-                                                                    className="flex items-center gap-2 sm:gap-3 flex-1 text-left min-w-0"
-                                                                >
-                                                                    <span className="text-base sm:text-lg flex-shrink-0">📁</span>
-                                                                    <span className="text-gray-300 group-hover:text-white transition-colors text-sm truncate">
-                                                                        {dir.name}
-                                                                    </span>
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => selectDirectory(dir.path)}
-                                                                    className="px-2 sm:px-3 py-1 bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 rounded-lg text-xs sm:text-sm sm:opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                                                                >
-                                                                    Select
-                                                                </button>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="p-2 sm:p-3 bg-white/5 border-t border-white/10 flex flex-col sm:flex-row gap-2 sm:justify-between">
-                                                <button
-                                                    onClick={() => selectDirectory(currentBrowsePath)}
-                                                    className="px-3 sm:px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs sm:text-sm font-semibold transition-colors w-full sm:w-auto"
-                                                >
-                                                    Select Current Folder
-                                                </button>
-                                                <button
-                                                    onClick={() => setBrowsing(false)}
-                                                    className="px-3 sm:px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs sm:text-sm transition-colors w-full sm:w-auto"
-                                                >
-                                                    Cancel
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
 
                                     {/* Description */}
                                     <div>
