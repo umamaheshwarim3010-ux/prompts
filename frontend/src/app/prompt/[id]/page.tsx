@@ -253,28 +253,78 @@ export default function PromptDetailPage() {
         if (!page) return
         setSaving(true)
         try {
-            const textarea = document.getElementById(`editor-${page.id}`) as HTMLTextAreaElement
-            if (!textarea) return
+            let content = ''
 
-            const content = textarea.value
+            // Check if we are in BOTH mode with dual textareas
+            const nlpTextarea = document.getElementById(`editor-nlp-${page.id}`) as HTMLTextAreaElement
+            const devTextarea = document.getElementById(`editor-dev-${page.id}`) as HTMLTextAreaElement
+
+            if (nlpTextarea && devTextarea && page.rawContent) {
+                // BOTH mode: Reconstruct full file from the two textareas
+                // The original file has NLP section(s) first, then DEV section(s)
+                // We replace each section's content in the original rawContent
+                const originalLines = page.rawContent.split('\n')
+                const sortedNlp = [...nlpSections].sort((a, b) => a.startLine - b.startLine)
+                const sortedDev = [...devSections].sort((a, b) => a.startLine - b.startLine)
+
+                // Build replacement map: { startLine, endLine, newContent }
+                const replacements: { startLine: number; endLine: number; newContent: string }[] = []
+
+                if (sortedNlp.length > 0) {
+                    const nlpStart = sortedNlp[0].startLine
+                    const nlpEnd = sortedNlp[sortedNlp.length - 1].endLine
+                    replacements.push({ startLine: nlpStart, endLine: nlpEnd, newContent: nlpTextarea.value })
+                }
+                if (sortedDev.length > 0) {
+                    const devStart = sortedDev[0].startLine
+                    const devEnd = sortedDev[sortedDev.length - 1].endLine
+                    replacements.push({ startLine: devStart, endLine: devEnd, newContent: devTextarea.value })
+                }
+
+                // Sort replacements by startLine descending so we replace from bottom up (preserving line numbers)
+                replacements.sort((a, b) => b.startLine - a.startLine)
+
+                const resultLines = [...originalLines]
+                for (const rep of replacements) {
+                    const newLines = rep.newContent.split('\n')
+                    resultLines.splice(rep.startLine - 1, rep.endLine - rep.startLine + 1, ...newLines)
+                }
+
+                content = resultLines.join('\n')
+            } else {
+                // Single textarea mode (fallback)
+                const textarea = document.getElementById(`editor-${page.id}`) as HTMLTextAreaElement
+                if (!textarea) {
+                    console.error('No textarea found for saving')
+                    alert('Could not find editor content to save.')
+                    return
+                }
+                content = textarea.value
+            }
+
+            console.log('Saving content, length:', content.length)
 
             const saveResult = await apiRequest('/api/save', {
                 method: 'POST',
                 body: { pageId: page.id, content }
             })
 
-            if (!saveResult.success) throw new Error('Save failed')
+            console.log('Save result:', saveResult)
+
+            if (!saveResult.success) {
+                throw new Error(saveResult.error || 'Save failed')
+            }
 
             // Re-seed the database
-            await apiRequest('/api/seed', { method: 'POST' })
+            const seedResult = await apiRequest('/api/seed', { method: 'POST' })
+            console.log('Seed result:', seedResult)
 
-            // Refresh page data
-            await fetchPageData()
-
-            setIsEditing(false)
+            alert('Saved successfully!')
+            // Redirect to dashboard (re-seed generates new IDs, so current URL becomes stale)
+            router.push('/')
         } catch (e) {
-            console.error(e)
-            alert('Failed to save changes')
+            console.error('Save error:', e)
+            alert('Failed to save changes: ' + (e instanceof Error ? e.message : String(e)))
         } finally {
             setSaving(false)
         }
@@ -439,228 +489,356 @@ export default function PromptDetailPage() {
             </header>
 
             {/* Main Content */}
-            <main className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
-                {/* Editor */}
-                {isEditing && page.rawContent && (
-                    <div className="glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6">
-                        {(() => {
-                            let editorContent = page.rawContent || ''
-                            let editorTitle = `Editing ${page.componentName}.txt`
-
-                            if (promptFilter === 'NLP') {
-                                if (page.rawContent) {
-                                    const lines = page.rawContent.split('\n')
-                                    editorContent = nlpSections
-                                        .sort((a, b) => a.startLine - b.startLine)
-                                        .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                                        .join('\n\n')
-                                    editorTitle = 'Editing NLP Prompts (Read-only view)'
-                                }
-                            } else if (promptFilter === 'DEVELOPER') {
-                                if (page.rawContent) {
-                                    const lines = page.rawContent.split('\n')
-                                    editorContent = devSections
-                                        .sort((a, b) => a.startLine - b.startLine)
-                                        .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                                        .join('\n\n')
-                                    editorTitle = 'Editing Developer Prompts (Read-only view)'
-                                }
-                            }
-
-                            return (
-                                <>
-                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-emerald-400">✏️</span>
-                                            <span className="text-sm sm:text-base font-medium text-white">{editorTitle}</span>
-                                        </div>
-                                        <button
-                                            onClick={handleSave}
-                                            disabled={saving || promptFilter !== 'ALL'}
-                                            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-lg font-bold shadow-lg transition-all ${promptFilter === 'ALL'
-                                                ? 'bg-green-600 hover:bg-green-500 disabled:bg-green-800 shadow-green-500/20 active:scale-95'
-                                                : 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                                                }`}
-                                            title={promptFilter !== 'BOTH' ? "Switch to 'BOTH' view to save changes" : "Save changes"}
-                                        >
-                                            {promptFilter === 'BOTH' ? (saving ? '💾 Saving...' : '💾 Save & Reprocess') : '🔒 Switch to BOTH to Save'}
-                                        </button>
-                                    </div>
-                                    <textarea
-                                        key={promptFilter}
-                                        id={`editor-${page.id}`}
-                                        className="w-full h-[350px] sm:h-[450px] lg:h-[500px] bg-slate-900 text-slate-300 font-mono text-[10px] sm:text-xs p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-y border border-slate-700"
-                                        defaultValue={editorContent}
-                                    />
-                                </>
-                            )
-                        })()}
-                    </div>
-                )}
-
-                {/* Content View - Text Based */}
+            <main className="max-w-7xl mx-auto">
+                {/* Flex layout: Side Panel (sticky) + Main content area */}
                 <div className="flex flex-col md:flex-row gap-4 items-start relative">
-                    {/* Side Panel - Sticky */}
+                    {/* Side Panel - Always visible & Sticky */}
                     <div className="hidden md:block sticky top-24 z-10">
                         <SidePanel activeFilter={focusedFilter} onFilterChange={setFocusedFilter} />
                     </div>
+                    {/* Mobile Side Panel */}
+                    <div className="md:hidden w-full">
+                        <SidePanel activeFilter={focusedFilter} onFilterChange={setFocusedFilter} />
+                    </div>
 
-                    <div className="flex-1 min-w-0 w-full">
-                        {(() => {
-                            // Helper to render content with highlighting
-                            const renderHighlightedContent = (content: string | null | undefined, type: 'NLP' | 'DEV') => {
-                                if (!content) return <span className="text-slate-500 italic">No {type} content found</span>
+                    <div className="flex-1 min-w-0 w-full space-y-4 sm:space-y-6">
+                        {/* Editor */}
+                        {isEditing && page.rawContent && (
+                            <div className="glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6">
+                                {(() => {
+                                    const lines = page.rawContent?.split('\n') || []
+                                    const canSave = promptFilter === 'BOTH' && !focusedFilter
 
-                                let currentBlock: 'FRONTEND' | 'BACKEND' | 'DATABASE' | null = null
+                                    // Helper: Apply FRONTEND/BACKEND/DATABASE focused filter to content
+                                    const applyFocusedFilter = (content: string): string => {
+                                        if (!focusedFilter || !content) return content
+                                        const contentLines = content.split('\n')
+                                        const filteredLines: string[] = []
+                                        let currentBlock: 'FRONTEND' | 'BACKEND' | 'DATABASE' | null = null
+                                        let includeBlock = false
 
-                                return content.split('\n').map((line, i) => {
-                                    const lowerLine = line.trim().toLowerCase()
+                                        for (const line of contentLines) {
+                                            const lowerLine = line.trim().toLowerCase()
+                                            if (lowerLine.startsWith('### frontend')) {
+                                                currentBlock = 'FRONTEND'
+                                                includeBlock = currentBlock === focusedFilter
+                                            } else if (lowerLine.startsWith('### backend')) {
+                                                currentBlock = 'BACKEND'
+                                                includeBlock = currentBlock === focusedFilter
+                                            } else if (lowerLine.startsWith('### database')) {
+                                                currentBlock = 'DATABASE'
+                                                includeBlock = currentBlock === focusedFilter
+                                            } else if (lowerLine.startsWith('###')) {
+                                                currentBlock = null
+                                                includeBlock = false
+                                            }
+                                            if (includeBlock) filteredLines.push(line)
+                                        }
+                                        return filteredLines.join('\n')
+                                    }
 
-                                    // Strict detection based on user request: starts with ### followed by section name
-                                    // Logic: ### marks start of a section. Identify which one.
-                                    if (lowerLine.startsWith('### frontend')) currentBlock = 'FRONTEND'
-                                    else if (lowerLine.startsWith('### backend')) currentBlock = 'BACKEND'
-                                    else if (lowerLine.startsWith('### database')) currentBlock = 'DATABASE'
-                                    // If it starts with ### but is NOT one of those, it's a different section, so reset.
-                                    else if (lowerLine.startsWith('###')) currentBlock = null
+                                    // ===== BOTH mode: Side-by-side dual textareas =====
+                                    if (promptFilter === 'BOTH') {
+                                        let nlpContent = nlpSections
+                                            .sort((a, b) => a.startLine - b.startLine)
+                                            .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                            .join('\n\n')
+                                        let devContent = devSections
+                                            .sort((a, b) => a.startLine - b.startLine)
+                                            .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                            .join('\n\n')
 
-                                    let isMatch = false
-                                    // Base classes
-                                    let lineClass = 'highlight-line block min-h-[1.2em] transition-colors duration-200 '
+                                        const isFiltered = !!focusedFilter
+                                        if (isFiltered) {
+                                            nlpContent = applyFocusedFilter(nlpContent)
+                                            devContent = applyFocusedFilter(devContent)
+                                        }
 
+                                        const editorTitle = isFiltered
+                                            ? `${focusedFilter} section (Read-only filtered view)`
+                                            : `Editing ${page.componentName}.txt`
+
+                                        return (
+                                            <>
+                                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-emerald-400">✏️</span>
+                                                        <span className="text-sm sm:text-base font-medium text-white">{editorTitle}</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={handleSave}
+                                                        disabled={saving || !canSave}
+                                                        className={`px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-lg font-bold shadow-lg transition-all ${canSave
+                                                            ? 'bg-green-600 hover:bg-green-500 disabled:bg-green-800 shadow-green-500/20 active:scale-95'
+                                                            : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                                                            }`}
+                                                        title={!canSave ? "Clear the filter to save changes" : "Save changes"}
+                                                    >
+                                                        {canSave ? (saving ? '💾 Saving...' : '💾 Save & Reprocess') : `🔒 Clear filter to Save`}
+                                                    </button>
+                                                </div>
+                                                {/* Two-column layout matching view mode */}
+                                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                                    {/* NLP Column */}
+                                                    <div className="flex flex-col">
+                                                        <div className="flex justify-between items-center mb-3 pb-2 border-b border-emerald-500/30">
+                                                            <h3 className="text-sm sm:text-base font-semibold text-emerald-400 flex items-center gap-2">
+                                                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                                                                NLP Prompt
+                                                            </h3>
+                                                            <CopyButton text={nlpContent} />
+                                                        </div>
+                                                        <textarea
+                                                            key={`nlp-${focusedFilter || 'none'}`}
+                                                            id={`editor-nlp-${page.id}`}
+                                                            className="w-full bg-slate-900/50 text-slate-300 font-mono text-[10px] sm:text-xs p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-y border border-slate-700/50"
+                                                            style={{ height: '500px' }}
+                                                            defaultValue={nlpContent}
+                                                            readOnly={isFiltered}
+                                                        />
+                                                    </div>
+
+                                                    {/* Developer Column */}
+                                                    <div className="flex flex-col">
+                                                        <div className="flex justify-between items-center mb-3 pb-2 border-b border-purple-500/30">
+                                                            <h3 className="text-sm sm:text-base font-semibold text-purple-400 flex items-center gap-2">
+                                                                <span className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
+                                                                Developer Prompt
+                                                            </h3>
+                                                            <CopyButton text={devContent} />
+                                                        </div>
+                                                        <textarea
+                                                            key={`dev-${focusedFilter || 'none'}`}
+                                                            id={`editor-dev-${page.id}`}
+                                                            className="w-full bg-slate-900/50 text-slate-300 font-mono text-[10px] sm:text-xs p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-y border border-slate-700/50"
+                                                            style={{ height: '500px' }}
+                                                            defaultValue={devContent}
+                                                            readOnly={isFiltered}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )
+                                    }
+
+                                    // ===== NLP or DEVELOPER mode: Single textarea =====
+                                    let editorContent = page.rawContent || ''
+                                    let editorTitle = `Editing ${page.componentName}.txt`
+                                    let isReadOnly = false
+
+                                    if (promptFilter === 'NLP') {
+                                        editorContent = nlpSections
+                                            .sort((a, b) => a.startLine - b.startLine)
+                                            .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                            .join('\n\n')
+                                        editorTitle = 'Editing NLP Prompts (Read-only view)'
+                                        isReadOnly = true
+                                    } else if (promptFilter === 'DEVELOPER') {
+                                        editorContent = devSections
+                                            .sort((a, b) => a.startLine - b.startLine)
+                                            .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                            .join('\n\n')
+                                        editorTitle = 'Editing Developer Prompts (Read-only view)'
+                                        isReadOnly = true
+                                    }
+
+                                    // Apply focused filter
                                     if (focusedFilter) {
-                                        // Match if we are inside the matching block
-                                        if (currentBlock === focusedFilter) {
-                                            isMatch = true
+                                        editorContent = applyFocusedFilter(editorContent)
+                                        if (editorContent.trim()) {
+                                            editorTitle = `${focusedFilter} section (${promptFilter}) (Read-only filtered view)`
+                                            isReadOnly = true
                                         }
-
-                                        if (isMatch) {
-                                            lineClass += `highlight-${focusedFilter.toLowerCase()} font-medium text-white bg-${focusedFilter === 'FRONTEND' ? 'blue' :
-                                                focusedFilter === 'BACKEND' ? 'purple' : 'emerald'
-                                                }-500/10 `
-                                        } else {
-                                            lineClass += 'highlight-dimmed text-slate-700 dark:text-slate-600 '
-                                        }
-                                    } else {
-                                        // Normal state
-                                        lineClass += 'text-slate-300 '
                                     }
 
                                     return (
-                                        <span key={i} className={lineClass}>
-                                            {line}
-                                        </span>
+                                        <>
+                                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-emerald-400">✏️</span>
+                                                    <span className="text-sm sm:text-base font-medium text-white">{editorTitle}</span>
+                                                </div>
+                                                <button
+                                                    onClick={handleSave}
+                                                    disabled={saving || isReadOnly}
+                                                    className={`px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-lg font-bold shadow-lg transition-all ${!isReadOnly
+                                                        ? 'bg-green-600 hover:bg-green-500 disabled:bg-green-800 shadow-green-500/20 active:scale-95'
+                                                        : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                                                        }`}
+                                                    title={isReadOnly ? "Switch to 'BOTH' view with no filter to save changes" : "Save changes"}
+                                                >
+                                                    {!isReadOnly ? (saving ? '💾 Saving...' : '💾 Save & Reprocess') : '🔒 Switch to BOTH to Save'}
+                                                </button>
+                                            </div>
+                                            <textarea
+                                                key={`${promptFilter}-${focusedFilter || 'none'}`}
+                                                id={`editor-${page.id}`}
+                                                className="w-full h-[350px] sm:h-[450px] lg:h-[500px] bg-slate-900 text-slate-300 font-mono text-[10px] sm:text-xs p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-y border border-slate-700"
+                                                defaultValue={editorContent}
+                                                readOnly={isReadOnly}
+                                            />
+                                        </>
                                     )
-                                })
-                            }
-                            // For BOTH view - show side-by-side columns
-                            if (promptFilter === 'BOTH') {
-                                const lines = page.rawContent?.split('\n') || []
-                                const nlpContent = nlpSections
-                                    .sort((a, b) => a.startLine - b.startLine)
-                                    .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                                    .join('\n\n')
-                                const devContent = devSections
-                                    .sort((a, b) => a.startLine - b.startLine)
-                                    .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                                    .join('\n\n')
+                                })()}
+                            </div>
+                        )}
 
-                                if (!nlpContent && !devContent) {
+                        {/* Content View - Text Based */}
+                        {!isEditing && (
+                            <div className="w-full">
+                                {(() => {
+                                    // Helper to render content with highlighting
+                                    const renderHighlightedContent = (content: string | null | undefined, type: 'NLP' | 'DEV') => {
+                                        if (!content) return <span className="text-slate-500 italic">No {type} content found</span>
+
+                                        let currentBlock: 'FRONTEND' | 'BACKEND' | 'DATABASE' | null = null
+
+                                        return content.split('\n').map((line, i) => {
+                                            const lowerLine = line.trim().toLowerCase()
+
+                                            // Strict detection based on user request: starts with ### followed by section name
+                                            // Logic: ### marks start of a section. Identify which one.
+                                            if (lowerLine.startsWith('### frontend')) currentBlock = 'FRONTEND'
+                                            else if (lowerLine.startsWith('### backend')) currentBlock = 'BACKEND'
+                                            else if (lowerLine.startsWith('### database')) currentBlock = 'DATABASE'
+                                            // If it starts with ### but is NOT one of those, it's a different section, so reset.
+                                            else if (lowerLine.startsWith('###')) currentBlock = null
+
+                                            let isMatch = false
+                                            // Base classes
+                                            let lineClass = 'highlight-line block min-h-[1.2em] transition-colors duration-200 '
+
+                                            if (focusedFilter) {
+                                                // Match if we are inside the matching block
+                                                if (currentBlock === focusedFilter) {
+                                                    isMatch = true
+                                                }
+
+                                                if (isMatch) {
+                                                    lineClass += `highlight-${focusedFilter.toLowerCase()} font-medium text-white bg-${focusedFilter === 'FRONTEND' ? 'blue' :
+                                                        focusedFilter === 'BACKEND' ? 'purple' : 'emerald'
+                                                        }-500/10 `
+                                                } else {
+                                                    lineClass += 'highlight-dimmed text-slate-700 dark:text-slate-600 '
+                                                }
+                                            } else {
+                                                // Normal state
+                                                lineClass += 'text-slate-300 '
+                                            }
+
+                                            return (
+                                                <span key={i} className={lineClass}>
+                                                    {line}
+                                                </span>
+                                            )
+                                        })
+                                    }
+                                    // For BOTH view - show side-by-side columns
+                                    if (promptFilter === 'BOTH') {
+                                        const lines = page.rawContent?.split('\n') || []
+                                        const nlpContent = nlpSections
+                                            .sort((a, b) => a.startLine - b.startLine)
+                                            .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                            .join('\n\n')
+                                        const devContent = devSections
+                                            .sort((a, b) => a.startLine - b.startLine)
+                                            .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                            .join('\n\n')
+
+                                        if (!nlpContent && !devContent) {
+                                            return (
+                                                <div className="glass-panel rounded-xl sm:rounded-2xl p-12 text-center text-slate-400">
+                                                    <p>No content found for this section.</p>
+                                                </div>
+                                            )
+                                        }
+
+                                        return (
+                                            <div className="glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6 overflow-hidden">
+                                                {/* Two-column layout for BOTH view */}
+                                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                                    {/* NLP Column */}
+                                                    <div className="flex flex-col">
+                                                        <div className="flex justify-between items-center mb-3 pb-2 border-b border-emerald-500/30">
+                                                            <h3 className="text-sm sm:text-base font-semibold text-emerald-400 flex items-center gap-2">
+                                                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                                                                NLP Prompt
+                                                            </h3>
+                                                            <CopyButton text={nlpContent} />
+                                                        </div>
+                                                        <div className="bg-slate-900/50 rounded-lg border border-slate-700/50 overflow-hidden" style={{ height: '600px' }}>
+                                                            <pre className="text-slate-300 font-mono text-[10px] sm:text-xs p-4 whitespace-pre-wrap h-full overflow-y-auto custom-scrollbar">
+                                                                {renderHighlightedContent(nlpContent, 'NLP')}
+                                                            </pre>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Developer Column */}
+                                                    <div className="flex flex-col">
+                                                        <div className="flex justify-between items-center mb-3 pb-2 border-b border-purple-500/30">
+                                                            <h3 className="text-sm sm:text-base font-semibold text-purple-400 flex items-center gap-2">
+                                                                <span className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
+                                                                Developer Prompt
+                                                            </h3>
+                                                            <CopyButton text={devContent} />
+                                                        </div>
+                                                        <div className="bg-slate-900/50 rounded-lg border border-slate-700/50 overflow-hidden" style={{ height: '600px' }}>
+                                                            <pre className="text-slate-300 font-mono text-[10px] sm:text-xs p-4 whitespace-pre-wrap h-full overflow-y-auto custom-scrollbar">
+                                                                {renderHighlightedContent(devContent, 'DEV')}
+                                                            </pre>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    }
+
+                                    // For NLP or DEVELOPER individual views - show single column
+                                    let contentToDisplay = ''
+
+                                    if (promptFilter === 'NLP') {
+                                        if (page.rawContent) {
+                                            const lines = page.rawContent.split('\n')
+                                            contentToDisplay = nlpSections
+                                                .sort((a, b) => a.startLine - b.startLine)
+                                                .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                                .join('\n\n')
+                                        }
+                                    } else if (promptFilter === 'DEVELOPER') {
+                                        if (page.rawContent) {
+                                            const lines = page.rawContent.split('\n')
+                                            contentToDisplay = devSections
+                                                .sort((a, b) => a.startLine - b.startLine)
+                                                .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                                                .join('\n\n')
+                                        }
+                                    }
+
+                                    if (!contentToDisplay) {
+                                        return (
+                                            <div className="glass-panel rounded-xl sm:rounded-2xl p-12 text-center text-slate-400">
+                                                <p>No content found for this section.</p>
+                                            </div>
+                                        )
+                                    }
+
+
+                                    // Single Column View (NLP or DEVELOPER)
                                     return (
-                                        <div className="glass-panel rounded-xl sm:rounded-2xl p-12 text-center text-slate-400">
-                                            <p>No content found for this section.</p>
+                                        <div className="glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6 overflow-hidden">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <div className="ml-auto">
+                                                    <CopyButton text={contentToDisplay} />
+                                                </div>
+                                            </div>
+                                            <pre className="bg-slate-900/50 text-slate-300 font-mono text-[10px] sm:text-xs p-4 rounded-lg overflow-x-auto whitespace-pre-wrap border border-slate-700/50 h-[calc(100vh-300px)] custom-scrollbar">
+                                                {renderHighlightedContent(contentToDisplay, promptFilter === 'NLP' ? 'NLP' : 'DEV')}
+                                            </pre>
                                         </div>
                                     )
-                                }
-
-                                return (
-                                    <div className="glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6 overflow-hidden">
-                                        {/* Two-column layout for BOTH view */}
-                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                            {/* NLP Column */}
-                                            <div className="flex flex-col">
-                                                <div className="flex justify-between items-center mb-3 pb-2 border-b border-emerald-500/30">
-                                                    <h3 className="text-sm sm:text-base font-semibold text-emerald-400 flex items-center gap-2">
-                                                        <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-                                                        NLP Prompt
-                                                    </h3>
-                                                    <CopyButton text={nlpContent} />
-                                                </div>
-                                                <div className="bg-slate-900/50 rounded-lg border border-slate-700/50 overflow-hidden" style={{ height: '600px' }}>
-                                                    <pre className="text-slate-300 font-mono text-[10px] sm:text-xs p-4 whitespace-pre-wrap h-full overflow-y-auto custom-scrollbar">
-                                                        {renderHighlightedContent(nlpContent, 'NLP')}
-                                                    </pre>
-                                                </div>
-                                            </div>
-
-                                            {/* Developer Column */}
-                                            <div className="flex flex-col">
-                                                <div className="flex justify-between items-center mb-3 pb-2 border-b border-purple-500/30">
-                                                    <h3 className="text-sm sm:text-base font-semibold text-purple-400 flex items-center gap-2">
-                                                        <span className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
-                                                        Developer Prompt
-                                                    </h3>
-                                                    <CopyButton text={devContent} />
-                                                </div>
-                                                <div className="bg-slate-900/50 rounded-lg border border-slate-700/50 overflow-hidden" style={{ height: '600px' }}>
-                                                    <pre className="text-slate-300 font-mono text-[10px] sm:text-xs p-4 whitespace-pre-wrap h-full overflow-y-auto custom-scrollbar">
-                                                        {renderHighlightedContent(devContent, 'DEV')}
-                                                    </pre>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )
-                            }
-
-                            // For NLP or DEVELOPER individual views - show single column
-                            let contentToDisplay = ''
-
-                            if (promptFilter === 'NLP') {
-                                if (page.rawContent) {
-                                    const lines = page.rawContent.split('\n')
-                                    contentToDisplay = nlpSections
-                                        .sort((a, b) => a.startLine - b.startLine)
-                                        .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                                        .join('\n\n')
-                                }
-                            } else if (promptFilter === 'DEVELOPER') {
-                                if (page.rawContent) {
-                                    const lines = page.rawContent.split('\n')
-                                    contentToDisplay = devSections
-                                        .sort((a, b) => a.startLine - b.startLine)
-                                        .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                                        .join('\n\n')
-                                }
-                            }
-
-                            if (!contentToDisplay) {
-                                return (
-                                    <div className="glass-panel rounded-xl sm:rounded-2xl p-12 text-center text-slate-400">
-                                        <p>No content found for this section.</p>
-                                    </div>
-                                )
-                            }
-
-
-                            // Single Column View (NLP or DEVELOPER)
-                            return (
-                                <div className="glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6 overflow-hidden">
-                                    <div className="flex justify-between items-center mb-2">
-                                        {/* Mobile Toggle for Filter (if we wanted one, but SidePanel handles it largely) */}
-                                        <div className="md:hidden">
-                                            <SidePanel activeFilter={focusedFilter} onFilterChange={setFocusedFilter} />
-                                        </div>
-                                        <div className="ml-auto">
-                                            <CopyButton text={contentToDisplay} />
-                                        </div>
-                                    </div>
-                                    <pre className="bg-slate-900/50 text-slate-300 font-mono text-[10px] sm:text-xs p-4 rounded-lg overflow-x-auto whitespace-pre-wrap border border-slate-700/50 h-[calc(100vh-300px)] custom-scrollbar">
-                                        {renderHighlightedContent(contentToDisplay, promptFilter === 'NLP' ? 'NLP' : 'DEV')}
-                                    </pre>
-                                </div>
-                            )
-                        })()}
+                                })()}
+                            </div>
+                        )}
                     </div>
                 </div>
             </main>
