@@ -41,7 +41,32 @@ async function generate({ template, sourceCode }) {
 
     if (!response.ok) {
         const errorBody = await response.text();
-        throw new Error(`Gemini API error (${response.status}): ${errorBody}`);
+        let userMessage = `Gemini API error (${response.status})`;
+
+        try {
+            const parsed = JSON.parse(errorBody);
+            const apiMessage = parsed?.error?.message || '';
+            const status = parsed?.error?.status || '';
+
+            if (response.status === 429) {
+                // Rate limit / quota exceeded
+                const retryInfo = parsed?.error?.details?.find(d => d['@type']?.includes('RetryInfo'));
+                const retryDelay = retryInfo?.retryDelay || '';
+                userMessage = `API rate limit exceeded. ${retryDelay ? `Please retry after ${retryDelay}.` : 'Please wait a moment and try again.'} You may need to check your Gemini API quota at https://ai.google.dev/gemini-api/docs/rate-limits`;
+            } else if (response.status === 401 || response.status === 403) {
+                userMessage = 'Gemini API key is invalid or unauthorized. Please check your GEMINI_API_KEY in the .env file.';
+            } else if (apiMessage) {
+                // Extract just the first sentence of the API message
+                const firstSentence = apiMessage.split('.')[0];
+                userMessage = `Gemini API error: ${firstSentence}.`;
+            }
+        } catch (parseErr) {
+            // If body isn't JSON, use a generic message
+            userMessage = `Gemini API returned an error (HTTP ${response.status}). Please try again later.`;
+        }
+
+        console.error(`Gemini API raw error: ${errorBody.substring(0, 500)}`);
+        throw new Error(userMessage);
     }
 
     const data = await response.json();

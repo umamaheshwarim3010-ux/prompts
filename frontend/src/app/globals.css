@@ -2135,6 +2135,7 @@ html:not(.dark) .highlight-database {
         border-bottom-color: #334155;
     }
 }
+
 /* ============================================== */
 /* FORCE CODE EDITOR HIGH CONTRAST (LIGHT MODE FIX) */
 /* ============================================== */
@@ -2189,5 +2190,755 @@ html:not(.dark) .code-edit-textarea {
 }
 
 .dark .generate-btn:hover {
-    background: #6d28d9; 
+    background: #6d28d9;
+}
+
+/* ================================================
+   VS CODE IDE LAYOUT
+   ================================================ */
+
+.ide-layout {
+    display: flex;
+    height: calc(100vh - 80px);
+    max-width: 1400px;
+    margin: 0 auto;
+    border: 1px solid #3c3c3c;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #1e1e1e;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+html:not(.dark) .ide-layout {
+    border-color: #c4b5f0;
+    background: #ffffff;
+}
+
+/* Sidebar */
+.ide-sidebar {
+    width: 300px;
+    min-width: 240px;
+    max-width: 400px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: #252526;
+    border-right: 1px solid #3c3c3c;
+    overflow: hidden;
+}
+
+html:not(.dark) .ide-sidebar {
+    background: #f3f3f3;
+    border-right-color: #c4b5f0;
+}
+
+/* Sidebar search */
+.ide-sidebar-search {
+    padding: 8px 10px;
+    border-bottom: 1px solid #3c3c3c;
+}
+
+html:not(.dark) .ide-sidebar-search {
+    border-bottom-color: #c4b5f0;
+}
+
+.ide-sidebar-search input {
+    width: 100%;
+    padding: 4px 10px;
+    font-size: 12px;
+    background: #3c3c3c;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: #cccccc;
+    outline: none;
+    transition: border-color 0.15s ease;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.ide-sidebar-search input:focus {
+    border-color: #007acc;
+}
+
+html:not(.dark) .ide-sidebar-search input {
+    background: #fff;
+    border-color: #c4b5f0;
+    color: #333;
+}
+
+html:not(.dark) .ide-sidebar-search input:focus {
+    border-color: #A898E8;
+}
+
+/* Editor area */
+.ide-editor {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: #1e1e1e;
+}
+
+html:not(.dark) .ide-editor {
+    background: #ffffff;
+}
+
+/* Tab bar */
+.ide-tab-bar {
+    display: flex;
+    align-items: center;
+    height: 35px;
+    background: #252526;
+    border-bottom: 1px solid #3c3c3c;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-shrink: 0;
+}
+
+html:not(.dark) .ide-tab-bar {
+    background: #ececec;
+    border-bottom-color: #c4b5f0;
+}
+
+.ide-tab-bar::-webkit-scrollbar {
+    height: 0;
+}
+
+.ide-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 35px;
+    padding: 0 12px;
+    font-size: 13px;
+    color: #999999;
+    background: transparent;
+    border: none;
+    border-right: 1px solid #3c3c3c;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.1s;
+    flex-shrink: 0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+html:not(.dark) .ide-tab {
+    color: #6a6a8a;
+    border-right-color: #ddd;
+}
+
+.ide-tab:hover {
+    color: #ffffff;
+}
+
+html:not(.dark) .ide-tab:hover {
+    color: #3a3a5a;
+}
+
+.ide-tab.active {
+    background: #1e1e1e;
+    color: #ffffff;
+    border-bottom: 2px solid #007acc;
+}
+
+html:not(.dark) .ide-tab.active {
+    background: #ffffff;
+    color: #333333;
+    border-bottom-color: #A898E8;
+}
+
+.ide-tab-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: none;
+    background: transparent;
+    color: #999;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0;
+    transition: all 0.1s;
+    padding: 0;
+}
+
+.ide-tab:hover .ide-tab-close {
+    opacity: 1;
+}
+
+.ide-tab-close:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+}
+
+html:not(.dark) .ide-tab-close:hover {
+    background: rgba(0, 0, 0, 0.1);
+    color: #333;
+}
+
+/* Breadcrumb bar */
+.ide-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 12px;
+    height: 26px;
+    background: #1e1e1e;
+    border-bottom: 1px solid #3c3c3c;
+    font-size: 12px;
+    color: #999999;
+    overflow-x: auto;
+    flex-shrink: 0;
+}
+
+html:not(.dark) .ide-breadcrumb {
+    background: #ffffff;
+    border-bottom-color: #eee;
+    color: #6a6a8a;
+}
+
+.ide-breadcrumb span {
+    white-space: nowrap;
+}
+
+.ide-breadcrumb .separator {
+    color: #555;
+    font-size: 10px;
+}
+
+html:not(.dark) .ide-breadcrumb .separator {
+    color: #999;
+}
+
+/* Editor content area */
+.ide-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 16px 24px;
+}
+
+.ide-content::-webkit-scrollbar {
+    width: 10px;
+}
+
+.ide-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.ide-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 5px;
+}
+
+html:not(.dark) .ide-content::-webkit-scrollbar-thumb {
+    background: #c4b5f0;
+}
+
+/* Welcome screen (no file selected) */
+.ide-welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    padding: 40px;
+    text-align: center;
+    color: #5a5a5a;
+    user-select: none;
+}
+
+html:not(.dark) .ide-welcome {
+    color: #888;
+}
+
+.ide-welcome-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.3;
+}
+
+.ide-welcome h2 {
+    font-size: 20px;
+    font-weight: 400;
+    color: #cccccc;
+    margin-bottom: 8px;
+}
+
+html:not(.dark) .ide-welcome h2 {
+    color: #444;
+}
+
+.ide-welcome p {
+    font-size: 13px;
+    max-width: 360px;
+    line-height: 1.5;
+}
+
+.ide-welcome-shortcuts {
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.ide-welcome-shortcuts .shortcut {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #cccccc;
+}
+
+html:not(.dark) .ide-welcome-shortcuts .shortcut {
+    color: #555;
+}
+
+.ide-welcome-shortcuts kbd {
+    display: inline-flex;
+    padding: 1px 6px;
+    background: #333;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: monospace;
+    color: #ccc;
+}
+
+html:not(.dark) .ide-welcome-shortcuts kbd {
+    background: #f0f0f0;
+    border-color: #ccc;
+    color: #555;
+}
+
+/* File detail in editor panel */
+.file-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #3c3c3c;
+    margin-bottom: 20px;
+}
+
+html:not(.dark) .file-detail-header {
+    border-bottom-color: #eee;
+}
+
+.file-detail-header .file-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.file-detail-header .file-icon svg {
+    width: 32px;
+    height: 32px;
+}
+
+.file-detail-header .file-info h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #cccccc;
+    margin: 0;
+}
+
+html:not(.dark) .file-detail-header .file-info h2 {
+    color: #333;
+}
+
+.file-detail-header .file-info p {
+    font-size: 12px;
+    color: #888;
+    font-family: monospace;
+    margin: 2px 0 0 0;
+}
+
+.file-detail-stats {
+    display: flex;
+    gap: 16px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.file-detail-stat {
+    text-align: center;
+}
+
+.file-detail-stat .value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #cccccc;
+}
+
+html:not(.dark) .file-detail-stat .value {
+    color: #333;
+}
+
+.file-detail-stat .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #888;
+}
+
+/* Responsive: stack on mobile */
+@media (max-width: 768px) {
+    .ide-layout {
+        flex-direction: column;
+        height: auto;
+        min-height: calc(100vh - 80px);
+    }
+
+    .ide-sidebar {
+        width: 100%;
+        max-width: none;
+        max-height: 40vh;
+        border-right: none;
+        border-bottom: 1px solid #3c3c3c;
+    }
+
+    html:not(.dark) .ide-sidebar {
+        border-bottom-color: #c4b5f0;
+    }
+
+    .ide-editor {
+        min-height: 60vh;
+    }
+}
+
+/* ================================================
+   TREE VIEW - VS Code Style File Explorer
+   ================================================ */
+
+.tree-view-container {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    overflow: hidden;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+html:not(.dark) .tree-view-container {
+    background: transparent;
+    border-color: transparent;
+}
+
+.tree-view-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    height: 35px;
+    border-bottom: 1px solid #3c3c3c;
+    background: #2d2d2d;
+    user-select: none;
+}
+
+html:not(.dark) .tree-view-header {
+    background: #e8ddf0;
+    border-color: #c4b5f0;
+}
+
+.tree-view-header-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #bbbbbb;
+}
+
+html:not(.dark) .tree-view-header-title {
+    color: #5a5a7a;
+}
+
+.tree-view-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.tree-view-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: #c5c5c5;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    font-size: 14px;
+    padding: 0;
+}
+
+.tree-view-action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+html:not(.dark) .tree-view-action-btn {
+    color: #6a6a8a;
+}
+
+html:not(.dark) .tree-view-action-btn:hover {
+    background: rgba(168, 152, 232, 0.15);
+    color: #3a3a5a;
+}
+
+.tree-view-body {
+    padding: 2px 0;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+}
+
+/* Tree Node Row */
+.tree-node-row {
+    display: flex;
+    align-items: center;
+    height: 26px;
+    padding-right: 10px;
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    white-space: nowrap;
+    transition: background 0.05s ease;
+}
+
+.tree-node-row:hover {
+    background: #2a2d2e;
+}
+
+html:not(.dark) .tree-node-row:hover {
+    background: rgba(168, 152, 232, 0.1);
+}
+
+.tree-node-row.selected {
+    background: #094771;
+    border-left: 2px solid #007acc;
+}
+
+html:not(.dark) .tree-node-row.selected {
+    background: rgba(168, 152, 232, 0.22);
+    border-left: 2px solid #A898E8;
+}
+
+/* Indent Guides */
+.tree-indent-guide {
+    width: 18px;
+    position: relative;
+    flex-shrink: 0;
+    align-self: stretch;
+}
+
+.tree-indent-guide::before {
+    content: '';
+    position: absolute;
+    left: 9px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: #333;
+    opacity: 0.7;
+}
+
+html:not(.dark) .tree-indent-guide::before {
+    background: #c4b5f0;
+}
+
+.tree-node-row:hover .tree-indent-guide::before {
+    background: #505050;
+}
+
+html:not(.dark) .tree-node-row:hover .tree-indent-guide::before {
+    background: #a898e8;
+}
+
+/* Expand/Collapse Chevron */
+.tree-chevron {
+    width: 18px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: #c5c5c5;
+    font-size: 9px;
+    transition: transform 0.15s ease;
+}
+
+html:not(.dark) .tree-chevron {
+    color: #6a6a8a;
+}
+
+.tree-chevron.expanded {
+    transform: rotate(90deg);
+}
+
+.tree-chevron.hidden-chevron {
+    visibility: hidden;
+}
+
+/* File / Folder Icon */
+.tree-icon {
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-right: 6px;
+}
+
+.tree-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Tree Label */
+.tree-label {
+    font-size: 13px;
+    line-height: 26px;
+    color: #cccccc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+    letter-spacing: 0.01em;
+}
+
+html:not(.dark) .tree-label {
+    color: #3a3a5a;
+}
+
+.tree-label.folder {
+    font-weight: 600;
+    color: #cccccc;
+}
+
+html:not(.dark) .tree-label.folder {
+    color: #1a1a2e;
+}
+
+.tree-label.file {
+    font-weight: 400;
+}
+
+/* Status Dot (git-like) */
+.tree-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-left: 6px;
+}
+
+.tree-dot.modified {
+    background: #e2b93d;
+}
+
+.tree-dot.tracked {
+    background: #73c991;
+}
+
+/* Right-aligned badge/count */
+.tree-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: #969696;
+    margin-left: auto;
+    padding-left: 8px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+html:not(.dark) .tree-badge {
+    color: #7a7a9a;
+}
+
+.tree-badge-val {
+    font-weight: 700;
+    color: #d4d4d4;
+    font-size: 10px;
+}
+
+html:not(.dark) .tree-badge-val {
+    color: #3a3a5a;
+}
+
+/* Generate button inside tree row */
+.tree-gen-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    cursor: pointer;
+    background: rgba(16, 185, 129, 0.1);
+    color: #73c991;
+    margin-left: 6px;
+    flex-shrink: 0;
+    transition: all 0.1s;
+    line-height: 16px;
+    height: 18px;
+}
+
+html:not(.dark) .tree-gen-btn {
+    color: #059669;
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.tree-gen-btn:hover {
+    background: rgba(16, 185, 129, 0.25);
+    border-color: rgba(16, 185, 129, 0.5);
+}
+
+.tree-gen-btn.busy {
+    color: #e2b93d;
+    background: rgba(226, 185, 61, 0.1);
+    border-color: rgba(226, 185, 61, 0.3);
+    cursor: wait;
+    animation: pulse 1.5s infinite;
+}
+
+/* Children container */
+.tree-children {
+    overflow: hidden;
+}
+
+/* Scrollbar for tree body */
+.tree-view-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.tree-view-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.tree-view-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+
+html:not(.dark) .tree-view-body::-webkit-scrollbar-thumb {
+    background: #c4b5f0;
 }

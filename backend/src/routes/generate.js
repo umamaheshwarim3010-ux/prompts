@@ -267,9 +267,48 @@ router.post('/', async (req, res) => {
             // Ignore cleanup errors
         }
 
-        res.status(500).json({
+        // Classify the error for proper response
+        const msg = error.message || '';
+        let statusCode = 500;
+        let errorCategory = 'generation_failed';
+        let userMessage = 'An unexpected error occurred while generating prompts. Please try again.';
+
+        if (msg.includes('rate limit') || msg.includes('429') || msg.includes('quota')) {
+            statusCode = 429;
+            errorCategory = 'rate_limit';
+            userMessage = msg; // Already cleaned by gemini.js
+        } else if (msg.includes('invalid') || msg.includes('unauthorized') || msg.includes('API key')) {
+            statusCode = 401;
+            errorCategory = 'auth_error';
+            userMessage = msg;
+        } else if (msg.includes('not found') || msg.includes('not exist')) {
+            statusCode = 404;
+            errorCategory = 'not_found';
+            userMessage = msg;
+        } else if (msg.includes('empty')) {
+            statusCode = 400;
+            errorCategory = 'empty_source';
+            userMessage = msg;
+        } else if (msg.includes('Template')) {
+            statusCode = 500;
+            errorCategory = 'template_error';
+            userMessage = 'Prompt template not found. Please ensure templates are configured correctly.';
+        } else if (msg.includes('Seed failed')) {
+            statusCode = 500;
+            errorCategory = 'seed_error';
+            userMessage = 'Prompts were generated successfully, but syncing the database failed. Try clicking "Sync All Prompts".';
+        } else if (msg.includes('GEMINI_API_KEY')) {
+            statusCode = 500;
+            errorCategory = 'config_error';
+            userMessage = 'Gemini API key is not configured. Please set GEMINI_API_KEY in the backend .env file.';
+        } else {
+            userMessage = msg.length > 200 ? msg.substring(0, 200) + '...' : msg;
+        }
+
+        res.status(statusCode).json({
             success: false,
-            error: error.message || 'Failed to generate prompts',
+            error: userMessage,
+            errorCategory,
             elapsed: `${elapsed}ms`
         });
     }
