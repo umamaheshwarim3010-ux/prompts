@@ -63,8 +63,88 @@ interface MasterPrompt {
     queryExamples: string
 }
 
-// --- Components ---
+// --- Constants ---
+const KEYWORDS = {
+    FRONTEND: ['frontend', 'ui', 'component', 'style', 'css', 'html', 'react', 'view', 'display', 'render', 'button', 'input', 'modal', 'page'],
+    BACKEND: ['backend', 'api', 'server', 'route', 'controller', 'service', 'node', 'express', 'endpoint', 'logic', 'handler', 'auth', 'middleware'],
+    DATABASE: ['database', 'db', 'sql', 'prisma', 'schema', 'model', 'query', 'table', 'migration', 'seed', 'entity']
+}
 
+// --- Sidebar Component ---
+const Sidebar = ({
+    activeCategory,
+    onCategoryChange,
+    onOverviewClick,
+    isOverviewActive,
+    page
+}: {
+    activeCategory: 'FRONTEND' | 'BACKEND' | 'DATABASE' | null,
+    onCategoryChange: (cat: 'FRONTEND' | 'BACKEND' | 'DATABASE' | null) => void,
+    onOverviewClick: () => void,
+    isOverviewActive: boolean,
+    page: Page
+}) => {
+    const categories = [
+        { id: 'FRONTEND' as const, label: 'Frontend', icon: '🖥️' },
+        { id: 'BACKEND' as const, label: 'Backend', icon: '⚙️' },
+        { id: 'DATABASE' as const, label: 'Database', icon: '🗄️' }
+    ]
+
+    // Count logic blocks (functions)
+    const logicBlocks = page.functions?.length || 0
+
+    return (
+        <aside className="prompt-sidebar">
+            {/* Dashboard Header */}
+            <div className="sidebar-header">
+                <button className="sidebar-menu-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 12h18M3 6h18M3 18h18" />
+                    </svg>
+                </button>
+                <span className="sidebar-title">DASHBOARD</span>
+            </div>
+
+            {/* Categories */}
+            <div className="sidebar-section">
+                <div className="sidebar-section-label">CATEGORIES</div>
+                {categories.map(cat => (
+                    <button
+                        key={cat.id}
+                        onClick={() => onCategoryChange(activeCategory === cat.id ? null : cat.id)}
+                        className={`sidebar-category-btn ${activeCategory === cat.id ? 'active' : ''}`}
+                    >
+                        <span className="sidebar-cat-icon">{cat.icon}</span>
+                        <span>{cat.label}</span>
+                    </button>
+                ))}
+                {/* Overview Button */}
+                <button
+                    onClick={onOverviewClick}
+                    className={`sidebar-category-btn ${isOverviewActive ? 'active' : ''}`}
+                >
+                    <span className="sidebar-cat-icon">📋</span>
+                    <span>Overview</span>
+                </button>
+            </div>
+
+            {/* File Stats */}
+            <div className="sidebar-section">
+                <div className="sidebar-section-label">FILE STATS</div>
+                <div className="sidebar-stat-card">
+                    <div className="stat-label">LINES OF CODE</div>
+                    <div className="stat-value">{page.totalLines}</div>
+                </div>
+                <div className="sidebar-stat-card">
+                    <div className="stat-label">LOGIC BLOCKS</div>
+                    <div className="stat-value">{logicBlocks}</div>
+                </div>
+            </div>
+        </aside>
+    )
+}
+
+// --- Copy Button ---
 const CopyButton = ({ text }: { text: string }) => {
     const [copied, setCopied] = useState(false)
 
@@ -78,29 +158,10 @@ const CopyButton = ({ text }: { text: string }) => {
     return (
         <button
             onClick={handleCopy}
-            className={`text-xs px-2 py-1 rounded transition-colors border ${copied
-                ? 'bg-green-500/20 text-green-300 border-green-500/30'
-                : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
-                }`}
+            className={`copy-btn ${copied ? 'copied' : ''}`}
         >
             {copied ? '✓ Copied' : 'Copy'}
         </button>
-    )
-}
-
-const Badge = ({ children, color = 'blue' }: { children: React.ReactNode, color?: 'blue' | 'purple' | 'green' | 'amber' | 'red' }) => {
-    const colors = {
-        blue: 'bg-blue-500/10 text-blue-300 border-blue-500/20',
-        purple: 'bg-purple-500/10 text-purple-300 border-purple-500/20',
-        green: 'bg-green-500/10 text-green-300 border-green-500/20',
-        amber: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
-        red: 'bg-red-500/10 text-red-300 border-red-500/20',
-    }
-
-    return (
-        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${colors[color]}`}>
-            {children}
-        </span>
     )
 }
 
@@ -113,11 +174,21 @@ export default function PromptDetailPage() {
     const [masterPrompt, setMasterPrompt] = useState<MasterPrompt | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
     const [isEditing, setIsEditing] = useState(false)
-    const [searchQuery, setSearchQuery] = useState('')
     const [saving, setSaving] = useState(false)
-    const [promptFilter, setPromptFilter] = useState<'ALL' | 'NLP' | 'DEVELOPER'>('ALL')
+    const [promptFilter, setPromptFilter] = useState<'BOTH' | 'NLP' | 'DEVELOPER'>('BOTH')
+    const [focusedFilter, setFocusedFilter] = useState<'FRONTEND' | 'BACKEND' | 'DATABASE' | null>(null)
+    const [isOverview, setIsOverview] = useState(false)
+    const [viewMode, setViewMode] = useState<'prompt' | 'code'>('prompt')
+    const [isFullscreen, setIsFullscreen] = useState(false)
+    const [sourceCode, setSourceCode] = useState<string | null>(null)
+    const [sourceCodeLoading, setSourceCodeLoading] = useState(false)
+    const [sourceCodeError, setSourceCodeError] = useState<string | null>(null)
+    const [isEditingCode, setIsEditingCode] = useState(false)
+    const [editedCode, setEditedCode] = useState<string>('')
+    const [savingCode, setSavingCode] = useState(false)
+    const [sourceFilePath, setSourceFilePath] = useState<string>('')
+    const [sourceLastModified, setSourceLastModified] = useState<string>('')
 
     useEffect(() => {
         const token = getAccessToken()
@@ -162,33 +233,62 @@ export default function PromptDetailPage() {
         }
     }
 
-    const toggleSection = (id: string) => {
-        const next = new Set(expandedSections)
-        if (next.has(id)) next.delete(id)
-        else next.add(id)
-        setExpandedSections(next)
+    // Fetch the actual source code from the codebase
+    const fetchSourceCode = async () => {
+        if (!pageId) return
+        setSourceCodeLoading(true)
+        setSourceCodeError(null)
+        try {
+            const result = await apiRequest<{
+                success: boolean
+                sourceCode: string
+                filePath: string
+                lastModified: string
+            }>(`/api/code/${pageId}`)
+
+            if (result.success && result.data) {
+                setSourceCode(result.data.sourceCode)
+                setEditedCode(result.data.sourceCode)
+                setSourceFilePath(result.data.filePath)
+                if (result.data.lastModified) {
+                    setSourceLastModified(new Date(result.data.lastModified).toLocaleString())
+                }
+            } else {
+                setSourceCodeError(result.error || 'Failed to load source code')
+            }
+        } catch (err) {
+            console.error('Source code fetch error:', err)
+            setSourceCodeError('Could not load source code.')
+        } finally {
+            setSourceCodeLoading(false)
+        }
     }
 
-    const scrollToLine = (line: number) => {
-        if (!page?.rawContent) return
+    // Save the edited source code back to the file system
+    const handleSaveCode = async () => {
+        if (!pageId) return
+        setSavingCode(true)
+        try {
+            const result = await apiRequest(`/api/code/${pageId}`, {
+                method: 'POST',
+                body: { sourceCode: editedCode }
+            })
 
-        const lines = page.rawContent.split('\n')
-        if (line < 1) line = 1
-        if (line > lines.length) line = lines.length
-
-        const pos = lines.slice(0, line - 1).join('\n').length
-
-        setIsEditing(true)
-
-        setTimeout(() => {
-            const textarea = document.getElementById(`editor-${page.id}`) as HTMLTextAreaElement
-            if (textarea) {
-                textarea.focus()
-                textarea.setSelectionRange(pos, pos + lines[line - 1].length)
-                const lineHeight = 16
-                textarea.scrollTop = (line - 1) * lineHeight - (textarea.clientHeight / 2)
+            if (result.success) {
+                setSourceCode(editedCode)
+                setIsEditingCode(false)
+                alert('Source code saved successfully!')
+                // Refresh page data to update line count
+                fetchPageData()
+            } else {
+                throw new Error(result.error || 'Save failed')
             }
-        }, 100)
+        } catch (e) {
+            console.error('Code save error:', e)
+            alert('Failed to save source code: ' + (e instanceof Error ? e.message : String(e)))
+        } finally {
+            setSavingCode(false)
+        }
     }
 
     const downloadFile = () => {
@@ -206,48 +306,76 @@ export default function PromptDetailPage() {
         if (!page) return
         setSaving(true)
         try {
-            const textarea = document.getElementById(`editor-${page.id}`) as HTMLTextAreaElement
-            if (!textarea) return
+            let content = ''
 
-            const content = textarea.value
+            // Check if we are in BOTH mode with dual textareas
+            const nlpTextarea = document.getElementById(`editor-nlp-${page.id}`) as HTMLTextAreaElement
+            const devTextarea = document.getElementById(`editor-dev-${page.id}`) as HTMLTextAreaElement
+
+            if (nlpTextarea && devTextarea && page.rawContent) {
+                const originalLines = page.rawContent.split('\n')
+                const sortedNlp = [...nlpSections].sort((a, b) => a.startLine - b.startLine)
+                const sortedDev = [...devSections].sort((a, b) => a.startLine - b.startLine)
+
+                const replacements: { startLine: number; endLine: number; newContent: string }[] = []
+
+                if (sortedNlp.length > 0) {
+                    const nlpStart = sortedNlp[0].startLine
+                    const nlpEnd = sortedNlp[sortedNlp.length - 1].endLine
+                    replacements.push({ startLine: nlpStart, endLine: nlpEnd, newContent: nlpTextarea.value })
+                }
+                if (sortedDev.length > 0) {
+                    const devStart = sortedDev[0].startLine
+                    const devEnd = sortedDev[sortedDev.length - 1].endLine
+                    replacements.push({ startLine: devStart, endLine: devEnd, newContent: devTextarea.value })
+                }
+
+                replacements.sort((a, b) => b.startLine - a.startLine)
+
+                const resultLines = [...originalLines]
+                for (const rep of replacements) {
+                    const newLines = rep.newContent.split('\n')
+                    resultLines.splice(rep.startLine - 1, rep.endLine - rep.startLine + 1, ...newLines)
+                }
+
+                content = resultLines.join('\n')
+            } else {
+                const textarea = document.getElementById(`editor-${page.id}`) as HTMLTextAreaElement
+                if (!textarea) {
+                    console.error('No textarea found for saving')
+                    alert('Could not find editor content to save.')
+                    return
+                }
+                content = textarea.value
+            }
 
             const saveResult = await apiRequest('/api/save', {
                 method: 'POST',
                 body: { pageId: page.id, content }
             })
 
-            if (!saveResult.success) throw new Error('Save failed')
+            if (!saveResult.success) {
+                throw new Error(saveResult.error || 'Save failed')
+            }
 
-            // Re-seed the database
-            await apiRequest('/api/seed', { method: 'POST' })
+            const seedResult = await apiRequest('/api/seed', { method: 'POST' })
+            console.log('Seed result:', seedResult)
 
-            // Refresh page data
-            await fetchPageData()
-
-            setIsEditing(false)
+            alert('Saved successfully!')
+            router.push('/')
         } catch (e) {
-            console.error(e)
-            alert('Failed to save changes')
+            console.error('Save error:', e)
+            alert('Failed to save changes: ' + (e instanceof Error ? e.message : String(e)))
         } finally {
             setSaving(false)
         }
     }
 
-    const filteredSections = page?.sections
-        ? searchQuery
-            ? page.sections.filter(s =>
-                s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                s.purpose.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                s.prompts.some(p => p.template.toLowerCase().includes(searchQuery.toLowerCase()))
-            )
-            : page.sections
-        : []
-
     // Loading state
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin"></div>
+            <div className="prompt-loading">
+                <div className="prompt-spinner"></div>
             </div>
         )
     }
@@ -255,21 +383,20 @@ export default function PromptDetailPage() {
     // Error state
     if (error || !page) {
         return (
-            <div className="min-h-screen flex items-center justify-center p-4">
-                <div className="glass-panel rounded-2xl p-8 text-center max-w-md">
-                    <div className="text-4xl mb-4">⚠️</div>
-                    <h2 className="text-xl font-bold text-red-400 mb-2">{error || 'Page not found'}</h2>
-                    <p className="text-slate-400 mb-6">The prompt file could not be loaded.</p>
-                    <button
-                        onClick={() => router.push('/')}
-                        className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg font-semibold transition-all"
-                    >
+            <div className="prompt-error-container">
+                <div className="prompt-error-card">
+                    <div className="prompt-error-icon">⚠️</div>
+                    <h2 className="prompt-error-title">{error || 'Page not found'}</h2>
+                    <p className="prompt-error-text">The prompt file could not be loaded.</p>
+                    <button onClick={() => router.push('/')} className="prompt-error-btn">
                         ← Back to Dashboard
                     </button>
                 </div>
             </div>
         )
     }
+
+    const filteredSections = page?.sections || []
 
     // Group sections by type
     const nlpSections = filteredSections.filter(s =>
@@ -282,220 +409,518 @@ export default function PromptDetailPage() {
         s.name.toUpperCase().includes('DEV ') ||
         s.name.toUpperCase().includes('TECHNICAL')
     )
-    const otherSections = filteredSections.filter(s =>
-        !nlpSections.includes(s) && !devSections.includes(s)
-    )
+
+    // Get file path for display
+    const filePath = page.filePath.toUpperCase().replace(/\\/g, '/')
+    const fileInitials = page.componentName.substring(0, 2).toUpperCase()
+
+    // Build content to display
+    const getDisplayContent = () => {
+        if (!page.rawContent) return ''
+        const lines = page.rawContent.split('\n')
+
+        if (promptFilter === 'NLP') {
+            return nlpSections
+                .sort((a, b) => a.startLine - b.startLine)
+                .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                .join('\n\n')
+        } else if (promptFilter === 'DEVELOPER') {
+            return devSections
+                .sort((a, b) => a.startLine - b.startLine)
+                .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+                .join('\n\n')
+        }
+        return page.rawContent
+    }
+
+    // Apply focused filter (FRONTEND/BACKEND/DATABASE)
+    const applyFocusedFilter = (content: string): string => {
+        if (!focusedFilter || !content) return content
+        const contentLines = content.split('\n')
+        const filteredLines: string[] = []
+        let currentBlock: 'FRONTEND' | 'BACKEND' | 'DATABASE' | null = null
+        let includeBlock = false
+
+        for (const line of contentLines) {
+            const lowerLine = line.trim().toLowerCase()
+            if (lowerLine.startsWith('### frontend')) {
+                currentBlock = 'FRONTEND'
+                includeBlock = currentBlock === focusedFilter
+            } else if (lowerLine.startsWith('### backend')) {
+                currentBlock = 'BACKEND'
+                includeBlock = currentBlock === focusedFilter
+            } else if (lowerLine.startsWith('### database')) {
+                currentBlock = 'DATABASE'
+                includeBlock = currentBlock === focusedFilter
+            } else if (lowerLine.startsWith('###')) {
+                currentBlock = null
+                includeBlock = false
+            }
+            if (includeBlock) filteredLines.push(line)
+        }
+        return filteredLines.join('\n')
+    }
+
+    let displayContent = getDisplayContent()
+    if (focusedFilter) {
+        displayContent = applyFocusedFilter(displayContent)
+    }
+
+    // Build NLP and DEV content for BOTH split view
+    const getNlpContent = () => {
+        if (!page.rawContent) return ''
+        const lines = page.rawContent.split('\n')
+        let content = nlpSections
+            .sort((a, b) => a.startLine - b.startLine)
+            .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+            .join('\n\n')
+        if (focusedFilter) content = applyFocusedFilter(content)
+        return content
+    }
+
+    const getDevContent = () => {
+        if (!page.rawContent) return ''
+        const lines = page.rawContent.split('\n')
+        let content = devSections
+            .sort((a, b) => a.startLine - b.startLine)
+            .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
+            .join('\n\n')
+        if (focusedFilter) content = applyFocusedFilter(content)
+        return content
+    }
+
+    // Render content with markdown-like formatting
+    const renderFormattedContent = (content: string) => {
+        if (!content) return <p className="no-content-text">No content found for this section.</p>
+
+        let currentBlock: 'FRONTEND' | 'BACKEND' | 'DATABASE' | null = null
+
+        return content.split('\n').map((line, i) => {
+            const trimmed = line.trim()
+            const lowerLine = trimmed.toLowerCase()
+
+            // Track blocks
+            if (lowerLine.startsWith('### frontend')) currentBlock = 'FRONTEND'
+            else if (lowerLine.startsWith('### backend')) currentBlock = 'BACKEND'
+            else if (lowerLine.startsWith('### database')) currentBlock = 'DATABASE'
+            else if (lowerLine.startsWith('###')) currentBlock = null
+
+            // Determine if this line should be highlighted or dimmed
+            let lineClass = 'content-line'
+            if (focusedFilter) {
+                if (currentBlock === focusedFilter) {
+                    lineClass += ` highlight-active highlight-${focusedFilter.toLowerCase()}`
+                } else {
+                    lineClass += ' highlight-dimmed'
+                }
+            }
+
+            // Style based on content
+            if (trimmed.startsWith('SECTION ') || trimmed.startsWith('===')) {
+                return <span key={i} className={`${lineClass} content-section-header`}>{line}{'\n'}</span>
+            }
+            if (trimmed.startsWith('### ')) {
+                return <span key={i} className={`${lineClass} content-h3`}>{line}{'\n'}</span>
+            }
+            if (trimmed.startsWith('**') && trimmed.endsWith('**')) {
+                return <span key={i} className={`${lineClass} content-bold`}>{line}{'\n'}</span>
+            }
+            if (trimmed.startsWith('- **') || trimmed.startsWith('• **')) {
+                return <span key={i} className={`${lineClass} content-list-bold`}>{line}{'\n'}</span>
+            }
+            if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
+                return <span key={i} className={`${lineClass} content-list`}>{line}{'\n'}</span>
+            }
+            if (trimmed === '') {
+                return <span key={i} className="content-empty">{'\n'}</span>
+            }
+            return <span key={i} className={lineClass}>{line}{'\n'}</span>
+        })
+    }
 
     return (
-        <div className="min-h-screen text-slate-200 p-3 sm:p-4 md:p-6 lg:p-8 font-sans">
-            {/* Header */}
-            <header className="max-w-7xl mx-auto mb-6 sm:mb-8 glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6">
-                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6">
-                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                        {/* Back Button */}
-                        <button
-                            onClick={() => router.push('/')}
-                            className="p-2 sm:p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg sm:rounded-xl transition-all flex-shrink-0"
-                            title="Back to Dashboard"
-                        >
-                            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        <div className={`prompt-detail-layout ${isFullscreen ? 'fullscreen' : ''}`}>
+            {/* Sidebar */}
+            {!isFullscreen && (
+                <Sidebar
+                    activeCategory={focusedFilter}
+                    onCategoryChange={(cat) => {
+                        setFocusedFilter(cat)
+                        setIsOverview(false)
+                    }}
+                    onOverviewClick={() => {
+                        setFocusedFilter(null)
+                        setIsOverview(true)
+                    }}
+                    isOverviewActive={isOverview && !focusedFilter}
+                    page={page}
+                />
+            )}
+
+            {/* Main Content */}
+            <div className="prompt-main">
+                {/* Top Header Bar */}
+                <header className="prompt-topbar">
+                    <div className="topbar-left">
+                        <button onClick={() => router.push('/')} className="topbar-back-btn" title="Back to Dashboard">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <path d="M15 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                         </button>
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-indigo-500/20">
-                            <span className="text-xl sm:text-2xl">📄</span>
+                        <div className="topbar-file-icon">
+                            {fileInitials}
                         </div>
-                        <div className="min-w-0">
-                            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-white truncate">{page.componentName}</h1>
-                            <p className="text-xs sm:text-sm text-slate-400 font-mono truncate">Prompt file for {page.componentName}.js</p>
+                        <div className="topbar-file-info">
+                            <div className="topbar-filename">{page.componentName}.js</div>
+                            <div className="topbar-filepath">{filePath}</div>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                        {/* Prompt Type Filter Radio Buttons */}
-                        <div className="flex items-center gap-1 sm:gap-2 bg-slate-800/80 rounded-lg p-1 border border-slate-600/50">
-                            <button
-                                onClick={() => setPromptFilter('ALL')}
-                                className={`px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium rounded-md transition-all ${promptFilter === 'ALL'
-                                    ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/30'
-                                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                                    }`}
-                            >
-                                PROMPTS
-                            </button>
+                    <div className="topbar-right">
+                        {page.rawContent && (
+                            <>
+                                <button className="topbar-action-btn generate-btn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                    Generate
+                                </button>
+                                <button onClick={downloadFile} className="topbar-action-btn download-btn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                    Download
+                                </button>
+                                <button
+                                    onClick={() => setIsEditing(!isEditing)}
+                                    className={`topbar-action-btn edit-btn ${isEditing ? 'editing' : ''}`}
+                                >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                    Edit File
+                                </button>
+                                <ThemeToggle />
+                            </>
+                        )}
+                        {!page.rawContent && <ThemeToggle />}
+                    </div>
+                </header>
+
+                {/* Controls Bar */}
+                <div className="prompt-controls">
+                    <div className="controls-left">
+                        {/* View Mode Tabs */}
+                        <div className="view-mode-tabs">
+                            <span className="view-mode-label">VIEW MODE</span>
                             <button
                                 onClick={() => setPromptFilter('NLP')}
-                                className={`px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium rounded-md transition-all ${promptFilter === 'NLP'
-                                    ? 'bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-lg shadow-emerald-500/30'
-                                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                                    }`}
+                                className={`view-tab ${promptFilter === 'NLP' ? 'active' : ''}`}
                             >
                                 NLP
                             </button>
                             <button
                                 onClick={() => setPromptFilter('DEVELOPER')}
-                                className={`px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium rounded-md transition-all ${promptFilter === 'DEVELOPER'
-                                    ? 'bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg shadow-purple-500/30'
-                                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                                    }`}
+                                className={`view-tab ${promptFilter === 'DEVELOPER' ? 'active' : ''}`}
                             >
                                 DEVELOPER
                             </button>
+                            <button
+                                onClick={() => setPromptFilter('BOTH')}
+                                className={`view-tab ${promptFilter === 'BOTH' ? 'active' : ''}`}
+                            >
+                                BOTH
+                            </button>
                         </div>
-
-                        {/* Stats */}
-                        <div className="flex gap-3 sm:gap-4 mr-2 sm:mr-4">
-                            <div className="text-center">
-                                <div className="text-base sm:text-lg lg:text-xl font-bold text-indigo-400">{page.totalLines}</div>
-                                <div className="text-[9px] sm:text-[10px] text-slate-500 uppercase">Lines</div>
-                            </div>
-                            <div className="text-center">
-                                <div className="text-base sm:text-lg lg:text-xl font-bold text-emerald-400">{page.sections.length}</div>
-                                <div className="text-[9px] sm:text-[10px] text-slate-500 uppercase">Sections</div>
-                            </div>
-                        </div>
-
-                        {page.rawContent && (
-                            <>
-                                <button
-                                    onClick={downloadFile}
-                                    className="px-2 sm:px-3 py-1.5 sm:py-2 bg-slate-800 hover:bg-slate-700 text-[10px] sm:text-xs rounded-lg border border-slate-600 transition-colors"
-                                >
-                                    ⬇️ <span className="hidden xs:inline">Download</span>
-                                </button>
-                                <button
-                                    onClick={() => setIsEditing(!isEditing)}
-                                    className={`px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs rounded-lg border transition-colors ${isEditing ? 'bg-indigo-600 border-indigo-500' : 'bg-slate-800 hover:bg-slate-700 border-slate-600'}`}
-                                >
-                                    ✏️ <span className="hidden xs:inline">{isEditing ? 'Editing' : 'Edit'}</span>
-                                </button>
-                            </>
-                        )}
-                        {/* Close Button */}
+                    </div>
+                    <div className="controls-right">
+                        {/* Prompt / Code Toggle */}
                         <button
-                            onClick={() => router.push('/')}
-                            className="p-1.5 sm:p-2 bg-slate-800 hover:bg-red-600/80 text-slate-400 hover:text-white rounded-lg border border-slate-600 hover:border-red-500 transition-all"
-                            title="Close"
+                            onClick={() => setViewMode('prompt')}
+                            className={`toggle-btn prompt-toggle ${viewMode === 'prompt' ? 'active' : ''}`}
                         >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            Prompt
+                        </button>
+                        <button
+                            onClick={() => {
+                                setViewMode('code')
+                                if (!sourceCode && !sourceCodeLoading) {
+                                    fetchSourceCode()
+                                }
+                            }}
+                            className={`toggle-btn code-toggle ${viewMode === 'code' ? 'active' : ''}`}
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            Code
+                        </button>
+
+                        {/* Save/Bookmark icon */}
+                        <button className="icon-btn" title="Bookmark">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                         </button>
 
-                        {/* Theme Toggle */}
-                        <ThemeToggle />
+                        {/* Fullscreen */}
+                        <button className="icon-btn" title="Fullscreen" onClick={() => setIsFullscreen(!isFullscreen)}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </button>
                     </div>
                 </div>
 
-                {/* Purpose */}
-                <p className="mt-3 sm:mt-4 text-sm sm:text-base text-slate-300 line-clamp-2">{page.purpose}</p>
-            </header>
+                {/* Content Area */}
+                <div className="prompt-content-area">
+                    {/* Editor Mode */}
+                    {isEditing && page.rawContent && (
+                        <div className="editor-container">
+                            <div className="editor-header">
+                                <span className="editor-title">
+                                    ✏️ Editing {page.componentName}.txt
+                                    {focusedFilter ? ` (${focusedFilter} filter active - read only)` : ''}
+                                </span>
+                                <button
+                                    onClick={handleSave}
+                                    disabled={saving || !!focusedFilter || isOverview}
+                                    className={`save-btn ${(focusedFilter || isOverview) ? 'disabled' : ''}`}
+                                >
+                                    {saving ? '💾 Saving...' : focusedFilter ? '🔒 Clear filter to Save' : '💾 Save & Reprocess'}
+                                </button>
+                            </div>
 
-            {/* Main Content */}
-            <main className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
-                {/* Editor */}
-                {isEditing && page.rawContent && (
-                    <div className="glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6">
-                        {(() => {
-                            let editorContent = page.rawContent || ''
-                            let editorTitle = `Editing ${page.componentName}.txt`
-
-                            if (promptFilter === 'NLP') {
-                                if (page.rawContent) {
-                                    const lines = page.rawContent.split('\n')
-                                    editorContent = nlpSections
-                                        .sort((a, b) => a.startLine - b.startLine)
-                                        .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                                        .join('\n\n')
-                                    editorTitle = 'Editing NLP Prompts (Read-only view)'
-                                }
-                            } else if (promptFilter === 'DEVELOPER') {
-                                if (page.rawContent) {
-                                    const lines = page.rawContent.split('\n')
-                                    editorContent = devSections
-                                        .sort((a, b) => a.startLine - b.startLine)
-                                        .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                                        .join('\n\n')
-                                    editorTitle = 'Editing Developer Prompts (Read-only view)'
-                                }
-                            }
-
-                            return (
-                                <>
-                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-emerald-400">✏️</span>
-                                            <span className="text-sm sm:text-base font-medium text-white">{editorTitle}</span>
+                            {promptFilter === 'BOTH' ? (
+                                <div className="editor-dual">
+                                    <div className="editor-column">
+                                        <div className="editor-col-header nlp">
+                                            <span className="editor-col-dot nlp"></span>
+                                            NLP Prompt
                                         </div>
-                                        <button
-                                            onClick={handleSave}
-                                            disabled={saving || promptFilter !== 'ALL'}
-                                            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-lg font-bold shadow-lg transition-all ${promptFilter === 'ALL'
-                                                ? 'bg-green-600 hover:bg-green-500 disabled:bg-green-800 shadow-green-500/20 active:scale-95'
-                                                : 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                                                }`}
-                                            title={promptFilter !== 'ALL' ? "Switch to 'PROMPTS' view to save changes" : "Save changes"}
-                                        >
-                                            {promptFilter === 'ALL' ? (saving ? '💾 Saving...' : '💾 Save & Reprocess') : '🔒 Switch to PROMPTS to Save'}
-                                        </button>
+                                        <textarea
+                                            key={`nlp-${focusedFilter || 'none'}`}
+                                            id={`editor-nlp-${page.id}`}
+                                            className="editor-textarea"
+                                            defaultValue={
+                                                focusedFilter
+                                                    ? applyFocusedFilter(nlpSections
+                                                        .sort((a, b) => a.startLine - b.startLine)
+                                                        .map(s => (page.rawContent?.split('\n') || []).slice(s.startLine - 1, s.endLine).join('\n'))
+                                                        .join('\n\n'))
+                                                    : nlpSections
+                                                        .sort((a, b) => a.startLine - b.startLine)
+                                                        .map(s => (page.rawContent?.split('\n') || []).slice(s.startLine - 1, s.endLine).join('\n'))
+                                                        .join('\n\n')
+                                            }
+                                            readOnly={!!focusedFilter}
+                                        />
                                     </div>
-                                    <textarea
-                                        key={promptFilter}
-                                        id={`editor-${page.id}`}
-                                        className="w-full h-[350px] sm:h-[450px] lg:h-[500px] bg-slate-900 text-slate-300 font-mono text-[10px] sm:text-xs p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-y border border-slate-700"
-                                        defaultValue={editorContent}
-                                    />
-                                </>
-                            )
-                        })()}
-                    </div>
-                )}
-
-                {/* Content View - Text Based */}
-                {(() => {
-                    let contentToDisplay = ''
-
-                    if (promptFilter === 'ALL') {
-                        contentToDisplay = page.rawContent || ''
-                    } else if (promptFilter === 'NLP') {
-                        if (page.rawContent) {
-                            const lines = page.rawContent.split('\n')
-                            contentToDisplay = nlpSections
-                                .sort((a, b) => a.startLine - b.startLine)
-                                .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                                .join('\n\n') // Add separation between disjoint blocks
-                        }
-                    } else if (promptFilter === 'DEVELOPER') {
-                        if (page.rawContent) {
-                            const lines = page.rawContent.split('\n')
-                            contentToDisplay = devSections
-                                .sort((a, b) => a.startLine - b.startLine)
-                                .map(s => lines.slice(s.startLine - 1, s.endLine).join('\n'))
-                                .join('\n\n')
-                        }
-                    }
-
-                    if (!contentToDisplay) {
-                        return (
-                            <div className="glass-panel rounded-xl sm:rounded-2xl p-12 text-center text-slate-400">
-                                <p>No content found for this section.</p>
-                            </div>
-                        )
-                    }
-
-                    return (
-                        <div className="glass-panel rounded-xl sm:rounded-2xl p-4 sm:p-6 overflow-hidden">
-                            {/* Optional: Add a copy button for the whole block? User didn't ask but it's nice. */}
-                            <div className="flex justify-end mb-2">
-                                <CopyButton text={contentToDisplay} />
-                            </div>
-                            <pre className="bg-slate-900/50 text-slate-300 font-mono text-[10px] sm:text-xs p-4 rounded-lg overflow-x-auto whitespace-pre-wrap border border-slate-700/50">
-                                {contentToDisplay}
-                            </pre>
+                                    <div className="editor-column">
+                                        <div className="editor-col-header dev">
+                                            <span className="editor-col-dot dev"></span>
+                                            Developer Prompt
+                                        </div>
+                                        <textarea
+                                            key={`dev-${focusedFilter || 'none'}`}
+                                            id={`editor-dev-${page.id}`}
+                                            className="editor-textarea"
+                                            defaultValue={
+                                                focusedFilter
+                                                    ? applyFocusedFilter(devSections
+                                                        .sort((a, b) => a.startLine - b.startLine)
+                                                        .map(s => (page.rawContent?.split('\n') || []).slice(s.startLine - 1, s.endLine).join('\n'))
+                                                        .join('\n\n'))
+                                                    : devSections
+                                                        .sort((a, b) => a.startLine - b.startLine)
+                                                        .map(s => (page.rawContent?.split('\n') || []).slice(s.startLine - 1, s.endLine).join('\n'))
+                                                        .join('\n\n')
+                                            }
+                                            readOnly={!!focusedFilter}
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <textarea
+                                    key={`${promptFilter}-${focusedFilter || 'none'}`}
+                                    id={`editor-${page.id}`}
+                                    className="editor-textarea single"
+                                    defaultValue={displayContent}
+                                    readOnly={true}
+                                />
+                            )}
                         </div>
-                    )
-                })()}
-            </main>
+                    )}
+
+                    {/* View Mode */}
+                    {!isEditing && (
+                        <>
+                            {/* BOTH mode: Side-by-side split view */}
+                            {promptFilter === 'BOTH' && viewMode === 'prompt' ? (
+                                <div className="split-view-container">
+                                    {/* NLP Column */}
+                                    <div className="split-view-column">
+                                        <div className="split-view-col-header">
+                                            <div className="split-col-title nlp">
+                                                <span className="split-col-dot nlp"></span>
+                                                NLP Prompt
+                                            </div>
+                                            <CopyButton text={getNlpContent()} />
+                                        </div>
+                                        <div className="split-view-body">
+                                            <pre className="content-pre">
+                                                {renderFormattedContent(getNlpContent())}
+                                            </pre>
+                                        </div>
+                                    </div>
+                                    {/* Developer Column */}
+                                    <div className="split-view-column">
+                                        <div className="split-view-col-header">
+                                            <div className="split-col-title dev">
+                                                <span className="split-col-dot dev"></span>
+                                                Developer Prompt
+                                            </div>
+                                            <CopyButton text={getDevContent()} />
+                                        </div>
+                                        <div className="split-view-body">
+                                            <pre className="content-pre">
+                                                {renderFormattedContent(getDevContent())}
+                                            </pre>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : viewMode === 'code' ? (
+                                /* Source Code View */
+                                <div className="code-editor-wrapper">
+                                    <div className="code-editor-header">
+                                        <div className="code-editor-info">
+                                            <div className="code-editor-dots">
+                                                <span className="dot red"></span>
+                                                <span className="dot yellow"></span>
+                                                <span className="dot green"></span>
+                                            </div>
+                                            <span className="code-editor-filepath">
+                                                {sourceFilePath || page.filePath}
+                                            </span>
+                                            {sourceLastModified && (
+                                                <span className="code-editor-modified">Last modified: {sourceLastModified}</span>
+                                            )}
+                                        </div>
+                                        <div className="code-editor-actions">
+                                            {isEditingCode ? (
+                                                <>
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsEditingCode(false)
+                                                            setEditedCode(sourceCode || '')
+                                                        }}
+                                                        className="code-action-btn cancel"
+                                                    >
+                                                        ✕ Cancel
+                                                    </button>
+                                                    <button
+                                                        onClick={handleSaveCode}
+                                                        disabled={savingCode}
+                                                        className="code-action-btn save"
+                                                    >
+                                                        {savingCode ? '💾 Saving...' : '💾 Save Code'}
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        onClick={() => fetchSourceCode()}
+                                                        className="code-action-btn refresh"
+                                                        title="Refresh code from disk"
+                                                    >
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                            <path d="M23 4v6h-6M1 20v-6h6" strokeLinecap="round" strokeLinejoin="round" />
+                                                            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" strokeLinecap="round" strokeLinejoin="round" />
+                                                        </svg>
+                                                        Refresh
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setIsEditingCode(true)}
+                                                        className="code-action-btn edit"
+                                                    >
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
+                                                        </svg>
+                                                        Edit Code
+                                                    </button>
+                                                    {sourceCode && <CopyButton text={sourceCode} />}
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="code-editor-body">
+                                        {sourceCodeLoading ? (
+                                            <div className="code-loading">
+                                                <div className="code-loading-spinner"></div>
+                                                <span>Loading source code...</span>
+                                            </div>
+                                        ) : sourceCodeError ? (
+                                            <div className="code-error">
+                                                <span className="code-error-icon">⚠️</span>
+                                                <span>{sourceCodeError}</span>
+                                                <button onClick={fetchSourceCode} className="code-retry-btn">Retry</button>
+                                            </div>
+                                        ) : isEditingCode ? (
+                                            <div className="code-edit-container">
+                                                <div className="code-line-numbers-gutter">
+                                                    {editedCode.split('\n').map((_, i) => (
+                                                        <span key={i} className="code-line-num">{i + 1}</span>
+                                                    ))}
+                                                </div>
+                                                <textarea
+                                                    className="code-edit-textarea"
+                                                    style={{ color: '#ffffff' }}
+                                                    value={editedCode}
+                                                    onChange={(e) => setEditedCode(e.target.value)}
+                                                    spellCheck={false}
+                                                    autoComplete="off"
+                                                    autoCorrect="off"
+                                                    autoCapitalize="off"
+                                                />
+                                            </div>
+                                        ) : sourceCode ? (
+                                            <div className="code-display-container">
+                                                <div className="code-line-numbers-gutter">
+                                                    {sourceCode.split('\n').map((_, i) => (
+                                                        <span key={i} className="code-line-num">{i + 1}</span>
+                                                    ))}
+                                                </div>
+                                                <pre className="code-source-pre" style={{ color: '#ffffff' }}>
+                                                    {sourceCode}
+                                                </pre>
+                                            </div>
+                                        ) : (
+                                            <div className="code-empty">
+                                                <span>Click &quot;Code&quot; to load the source file.</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                /* Single column view (NLP, DEVELOPER) */
+                                <div className="content-view-wrapper">
+                                    <div className="content-view-header">
+                                        <CopyButton text={displayContent} />
+                                    </div>
+                                    <div className="content-view-body">
+                                        <pre className="content-pre">
+                                            {renderFormattedContent(displayContent)}
+                                        </pre>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            </div>
         </div>
     )
 }

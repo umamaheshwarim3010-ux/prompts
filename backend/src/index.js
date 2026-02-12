@@ -1,4 +1,5 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const express = require('express');
 const cors = require('cors');
 const { authenticateToken, optionalAuth } = require('./middleware/auth');
@@ -9,6 +10,8 @@ const saveRouter = require('./routes/save');
 const promptsRouter = require('./routes/prompts');
 const authRouter = require('./routes/auth');
 const projectsRouter = require('./routes/projects');
+const codeRouter = require('./routes/code');
+const generateRouter = require('./routes/generate');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,6 +41,7 @@ app.use((req, res, next) => {
 // ==========================================
 app.use('/api/auth', authRouter);
 app.use('/api/seed', seedRouter); // Temporarily public for local database seeding
+app.use('/api/generate-prompts', generateRouter); // Temporarily public for local generation
 
 // Health check - public
 app.get('/api/health', (req, res) => {
@@ -53,6 +57,7 @@ app.use('/api/pages', authenticateToken, pagesRouter);
 app.use('/api/save', authenticateToken, saveRouter);
 app.use('/api/prompts', authenticateToken, promptsRouter);
 app.use('/api/projects', authenticateToken, projectsRouter);
+app.use('/api/code', authenticateToken, codeRouter);
 
 // ==========================================
 // Error Handling

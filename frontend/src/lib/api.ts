@@ -174,7 +174,7 @@ export const apiRequest = async <T = any>(
         if (!response.ok) {
             return {
                 success: false,
-                error: data.message || 'Request failed',
+                error: data.message || data.error || 'Request failed',
                 status: response.status
             };
         }

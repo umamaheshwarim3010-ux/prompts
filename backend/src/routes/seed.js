@@ -5,35 +5,135 @@ const { prisma } = require('../lib/prisma');
 
 const router = express.Router();
 
-const PROJECT_ROOT = process.env.PROJECT_ROOT || 'C:\\SNIX\\sify\\HrAssist\\exam';
-const APP_DIR = path.join(PROJECT_ROOT, 'app');
+// Helper to find project root
+const findProjectRoot = () => {
+    let candidates = [];
+    if (process.env.PROJECT_ROOT) {
+        candidates.push(process.env.PROJECT_ROOT);
+    }
 
-// Recursively find text files
-function getFilesRecursively(dir) {
-    let results = [];
-    try {
-        const list = fs.readdirSync(dir);
-        list.forEach(file => {
-            const filePath = path.join(dir, file);
-            const stat = fs.statSync(filePath);
-            if (stat && stat.isDirectory()) {
-                if (file !== 'node_modules' && file !== '.next' && file !== 'prompts') {
-                    results = results.concat(getFilesRecursively(filePath));
-                }
-            } else {
-                if (file.endsWith('.txt')) {
-                    results.push(filePath);
+    candidates.push('C:\\SNIX\\sify\\HrAssist\\exam');
+
+    const relativeRoot = path.resolve(__dirname, '../../../../../');
+    candidates.push(relativeRoot);
+
+    for (const root of candidates) {
+        const checkAppDir = path.join(root, 'app');
+        if (fs.existsSync(checkAppDir)) {
+            console.log(`Found valid project root at: ${root}`);
+            return root;
+        }
+    }
+
+    return process.env.PROJECT_ROOT || 'C:\\SNIX\\sify\\HrAssist\\exam';
+};
+
+const PROJECT_ROOT = findProjectRoot();
+
+// Directories to skip while scanning
+const SKIP_DIRS = new Set([
+    'node_modules', '.next', '.git', 'prompts', 'prompts1',
+    '.dockerignore', 'public', '.vercel', 'dist', 'build', '__pycache__'
+]);
+
+// Code file extensions to pick up
+const CODE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx']);
+
+// Prompt file extension
+const PROMPT_EXTENSION = '.txt';
+
+// ==========================================
+// File scanning helpers
+// ==========================================
+
+/**
+ * Recursively find ALL files (code + prompts) in the project root directories.
+ * Returns { codeFiles: string[], promptFiles: string[] }
+ */
+function scanProjectFiles(rootDir) {
+    const codeFiles = [];
+    const promptFiles = [];
+
+    function walk(dir) {
+        try {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const entry of entries) {
+                const fullPath = path.join(dir, entry.name);
+
+                if (entry.isDirectory()) {
+                    if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
+                        walk(fullPath);
+                    }
+                } else if (entry.isFile()) {
+                    const ext = path.extname(entry.name).toLowerCase();
+                    if (CODE_EXTENSIONS.has(ext)) {
+                        codeFiles.push(fullPath);
+                    } else if (ext === PROMPT_EXTENSION) {
+                        promptFiles.push(fullPath);
+                    }
                 }
             }
-        });
-    } catch (e) {
-        console.error(`Error scanning directory ${dir}:`, e);
+        } catch (e) {
+            console.error(`Error scanning directory ${dir}:`, e.message);
+        }
     }
-    return results;
+
+    walk(rootDir);
+    return { codeFiles, promptFiles };
 }
 
-// Robust text file parser - separates NLP and Developer prompts
-// Extracts meaningful content from section text as prompts
+/**
+ * For a given code file, try to find its matching .txt prompt file
+ * e.g. app/login/page.js -> app/login/page.txt
+ */
+function findMatchingPromptFile(codeFilePath, promptFiles) {
+    const baseName = codeFilePath.replace(/\.(js|jsx|ts|tsx)$/, '.txt');
+    return promptFiles.find(pf => pf === baseName) || null;
+}
+
+/**
+ * For a given prompt file, derive the target code file path
+ * e.g. app/login/page.txt -> app/login/page.js
+ */
+function deriveCodeFileFromPrompt(promptFilePath, codeFiles) {
+    const baseName = promptFilePath.replace(/\.txt$/, '');
+    // Try each code extension
+    for (const ext of CODE_EXTENSIONS) {
+        const candidate = baseName + ext;
+        if (codeFiles.includes(candidate)) {
+            return candidate;
+        }
+    }
+    // Default to .js if no matching code file found
+    return baseName + '.js';
+}
+
+// Helper to count lines in a file
+function countLines(filePath) {
+    try {
+        if (!fs.existsSync(filePath)) return 0;
+        const content = fs.readFileSync(filePath, 'utf-8');
+        return content.split(/\r\n|\r|\n/).length;
+    } catch (e) {
+        return 0;
+    }
+}
+
+// Helper to read file content safely
+function readFileSafe(filePath) {
+    try {
+        if (!fs.existsSync(filePath)) return null;
+        return fs.readFileSync(filePath, 'utf-8');
+    } catch (e) {
+        console.warn(`Could not read file: ${filePath}`);
+        return null;
+    }
+}
+
+// ==========================================
+// Prompt file parsing (same logic as before)
+// ==========================================
+
 function parsePromptFile(content) {
     const lines = content.split('\n');
     const sections = [];
@@ -42,53 +142,31 @@ function parsePromptFile(content) {
     let currentPrompts = [];
     let inCodeBlock = false;
 
-    // Helper to determine if a line is meaningful content
     const isSkipLine = (line) => {
-        // Skip empty lines
         if (!line || line.length === 0) return true;
-        // Skip decoration lines (===, ---, etc.)
         if (/^[=\-\*_]{3,}$/.test(line)) return true;
-        // Skip comment lines starting with # (but not ## headers)
         if (/^#[^#]/.test(line) || line === '#') return true;
         return false;
     };
 
-    // Helper to detect if line is a meaningful content line (numbered, bullet, or key topic)
-    const isContentLine = (line) => {
-        // Numbered items: 1. 2. 3. etc
-        if (/^\d+\.\s+.+/.test(line)) return true;
-        // Bullet points: ► > - • * ✓ ⚠
-        if (/^[►>\-•\*✓⚠]\s+.+/.test(line)) return true;
-        // Key topic lines with colon (but not just "PURPOSE:" or "SECTION:")
-        if (/^[A-Z][A-Z\s]+:/.test(line) && !/^(PURPOSE|SECTION|IMPORTS|FILE):/i.test(line)) return true;
-        // Lines starting with pipe (tables)
-        if (/^\|.+\|$/.test(line)) return true;
-        return false;
-    };
-
-    // Helper to determine if this is likely a heading/intro line (all caps with colon)
     const isHeadingLine = (line) => {
         return /^[A-Z][A-Z\s]+:$/.test(line) || /^[A-Z][A-Z\s]+:\s*$/.test(line);
     };
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        const rawLine = lines[i]; // Keep original for indented content
 
-        // Track code blocks
         if (line.startsWith('```')) {
             inCodeBlock = !inCodeBlock;
             continue;
         }
 
-        // Skip lines inside code blocks (but we'll collect them separately if needed)
         if (inCodeBlock) continue;
 
         // Detect Section Header
         const sectionMatch = line.match(/^(?:SECTION|Section)\s*(\d+)[:.]?\s*(.*)$/i);
 
         if (sectionMatch) {
-            // Save previous section
             if (currentSection) {
                 sections.push({
                     ...currentSection,
@@ -100,7 +178,6 @@ function parsePromptFile(content) {
             let name = rawName;
             let start = i + 1;
 
-            // Find where the next section starts to determine end line
             let end = lines.length;
             for (let j = i + 1; j < lines.length; j++) {
                 if (/^(?:SECTION|Section)\s*\d+[:.]?\s*/i.test(lines[j].trim())) {
@@ -109,9 +186,7 @@ function parsePromptFile(content) {
                 }
             }
 
-            // Try to extract (Lines X-Y) from the name
             const linesMatch = rawName.match(/(.*?)\s*\(Lines\s*(\d+)-(\d+)\)$/i);
-
             if (linesMatch) {
                 name = linesMatch[1].trim();
                 start = parseInt(linesMatch[2]);
@@ -128,141 +203,93 @@ function parsePromptFile(content) {
             continue;
         }
 
-        // Look for content within a section
         if (currentSection) {
-            // Capture PURPOSE
             if (line.toLowerCase().startsWith('purpose:')) {
                 currentSection.purpose = line.substring(8).trim();
                 continue;
             }
 
-            // NLP Prompts - Explicit tag
+            // NLP Prompts
             if (line.match(/^NLP_PROMPT:/i)) {
-                const promptLineNum = i + 1;
                 const template = line.replace(/^NLP_PROMPT:/i, '').trim().replace(/^"|"$/g, '');
                 let example = '';
                 if (i + 1 < lines.length && lines[i + 1].trim().match(/^EXAMPLE:/i)) {
                     example = lines[i + 1].trim().replace(/^EXAMPLE:/i, '').trim().replace(/^"|"$/g, '');
                 }
-                currentPrompts.push({
-                    template,
-                    example,
-                    lineNumber: promptLineNum,
-                    promptType: 'NLP'
-                });
+                currentPrompts.push({ template, example, lineNumber: i + 1, promptType: 'NLP' });
                 continue;
             }
 
-            // Developer Prompts - Explicit tag
+            // Developer Prompts
             if (line.match(/^DEV_PROMPT:/i)) {
-                const promptLineNum = i + 1;
                 const template = line.replace(/^DEV_PROMPT:/i, '').trim().replace(/^"|"$/g, '');
                 let example = '';
                 if (i + 1 < lines.length && lines[i + 1].trim().match(/^EXAMPLE:/i)) {
                     example = lines[i + 1].trim().replace(/^EXAMPLE:/i, '').trim().replace(/^"|"$/g, '');
                 }
-                currentPrompts.push({
-                    template,
-                    example,
-                    lineNumber: promptLineNum,
-                    promptType: 'DEVELOPER'
-                });
+                currentPrompts.push({ template, example, lineNumber: i + 1, promptType: 'DEVELOPER' });
                 continue;
             }
 
-            // Legacy PROMPT/TEMPLATE - Explicit tag
+            // Legacy PROMPT/TEMPLATE
             if (line.match(/^(PROMPT|TEMPLATE):/i)) {
-                const promptLineNum = i + 1;
                 const template = line.replace(/^(PROMPT|TEMPLATE):/i, '').trim().replace(/^"|"$/g, '');
                 let example = '';
                 if (i + 1 < lines.length && lines[i + 1].trim().match(/^EXAMPLE:/i)) {
                     example = lines[i + 1].trim().replace(/^EXAMPLE:/i, '').trim().replace(/^"|"$/g, '');
                 }
-                currentPrompts.push({
-                    template,
-                    example,
-                    lineNumber: promptLineNum,
-                    promptType: 'NLP'
-                });
+                currentPrompts.push({ template, example, lineNumber: i + 1, promptType: 'NLP' });
                 continue;
             }
 
-            // Skip empty/decoration lines
             if (isSkipLine(line)) continue;
 
-            // Extract meaningful content lines as prompts
-            // Numbered items (1. HEADER SECTION, 2. CHECK ICON, etc.)
+            // Numbered items
             const numberedMatch = line.match(/^(\d+)\.\s+(.+)$/);
             if (numberedMatch) {
-                const promptLineNum = i + 1;
                 let template = numberedMatch[2].trim();
-
-                // Collect any sub-content (indented lines following this)
                 let details = [];
                 let j = i + 1;
                 while (j < lines.length) {
                     const nextLine = lines[j].trim();
-                    // Stop if we hit another numbered item or section
                     if (/^\d+\.\s+/.test(nextLine) || /^(?:SECTION|Section)\s*\d+/i.test(nextLine)) break;
-                    // Stop if we hit a heading line
                     if (isHeadingLine(nextLine)) break;
-                    // Collect indented sub-items
                     if (nextLine.startsWith('-') || nextLine.startsWith('•')) {
                         details.push(nextLine.replace(/^[\-•]\s*/, ''));
                     }
                     j++;
                 }
-
                 if (details.length > 0) {
                     template = `${template}: ${details.join('; ')}`;
                 }
-
-                currentPrompts.push({
-                    template,
-                    example: '',
-                    lineNumber: promptLineNum,
-                    promptType: 'NLP'
-                });
+                currentPrompts.push({ template, example: '', lineNumber: i + 1, promptType: 'NLP' });
                 continue;
             }
 
-            // Action items (► CHANGE THE LOGO:, etc.)
+            // Action items (► > etc.)
             const actionMatch = line.match(/^[►>]\s+(.+)$/);
             if (actionMatch) {
-                const promptLineNum = i + 1;
                 let template = actionMatch[1].trim();
-
-                // Collect any sub-content (indented lines following this)
                 let details = [];
                 let j = i + 1;
-                while (j < lines.length && j < i + 5) { // Look ahead up to 5 lines
+                while (j < lines.length && j < i + 5) {
                     const nextLine = lines[j].trim();
-                    // Stop if we hit another action item or section
                     if (/^[►>]\s+/.test(nextLine) || /^(?:SECTION|Section)\s*\d+/i.test(nextLine)) break;
                     if (/^\d+\.\s+/.test(nextLine)) break;
-                    // Collect details
                     if (nextLine.startsWith('-') && !nextLine.startsWith('---')) {
                         details.push(nextLine.replace(/^-\s*/, ''));
                     }
                     j++;
                 }
-
                 if (details.length > 0) {
                     template = `${template} ${details.join(' | ')}`;
                 }
-
-                currentPrompts.push({
-                    template,
-                    example: '',
-                    lineNumber: promptLineNum,
-                    promptType: 'NLP'
-                });
+                currentPrompts.push({ template, example: '', lineNumber: i + 1, promptType: 'NLP' });
                 continue;
             }
 
-            // Table rows (| Component | Export | ...)
+            // Table rows
             if (line.startsWith('|') && line.endsWith('|') && !line.match(/^\|[\-\s\|]+\|$/)) {
-                // Skip header separator rows
                 const cells = line.split('|').filter(c => c.trim());
                 if (cells.length >= 2 && cells[0].trim() && !/^[\-\s]+$/.test(cells[0])) {
                     currentPrompts.push({
@@ -275,13 +302,10 @@ function parsePromptFile(content) {
                 continue;
             }
 
-            // Key topic headings that have content (### HeaderSection, etc.)
+            // ### headings
             const topicMatch = line.match(/^###?\s+(.+)$/);
             if (topicMatch) {
-                const promptLineNum = i + 1;
                 let template = topicMatch[1].trim();
-
-                // Collect any following content until next topic
                 let details = [];
                 let j = i + 1;
                 while (j < lines.length && j < i + 10) {
@@ -289,33 +313,26 @@ function parsePromptFile(content) {
                     if (/^###?\s+/.test(nextLine)) break;
                     if (/^(?:SECTION|Section)\s*\d+/i.test(nextLine)) break;
                     if (nextLine && !isSkipLine(nextLine) && !nextLine.startsWith('```')) {
-                        // Take first meaningful line as example
-                        if (details.length < 3) {
-                            details.push(nextLine);
-                        }
+                        if (details.length < 3) details.push(nextLine);
                     }
                     j++;
                 }
-
                 currentPrompts.push({
                     template,
                     example: details.length > 0 ? details[0] : '',
-                    lineNumber: promptLineNum,
+                    lineNumber: i + 1,
                     promptType: 'DEVELOPER'
                 });
                 continue;
             }
 
-            // All-caps heading with content following (VISUAL LAYOUT:, COLOR PALETTE:, etc.)
+            // All-caps heading
             const capsHeadingMatch = line.match(/^([A-Z][A-Z\s]+):$/);
             if (capsHeadingMatch && !/^(PURPOSE|SECTION|IMPORTS|FILE|END):/i.test(line)) {
-                const promptLineNum = i + 1;
-                let template = capsHeadingMatch[1].trim();
-
                 currentPrompts.push({
-                    template,
+                    template: capsHeadingMatch[1].trim(),
                     example: '',
-                    lineNumber: promptLineNum,
+                    lineNumber: i + 1,
                     promptType: 'NLP'
                 });
                 continue;
@@ -323,7 +340,6 @@ function parsePromptFile(content) {
         }
     }
 
-    // Push last section
     if (currentSection) {
         sections.push({
             ...currentSection,
@@ -334,7 +350,7 @@ function parsePromptFile(content) {
     return sections;
 }
 
-// Function to Parse Master NLP Prompt specifically
+// Parse Master NLP Prompt
 function parseMasterPrompt(content) {
     const nlpInstructionMatch = content.match(/INSTRUCTION SYNTAX:\s*([\s\S]*?)AVAILABLE SECTIONS:/);
     const nlpInstruction = nlpInstructionMatch ? nlpInstructionMatch[1].trim().replace(/"/g, '') : "Modify [SECTION] to [ACTION] at line [LINE]";
@@ -359,38 +375,42 @@ function extractTargetFile(content, fullPath) {
     return relative.replace(/\\/g, '/');
 }
 
-// Helper to count lines in a file
-function countLines(filePath) {
-    try {
-        if (!fs.existsSync(filePath)) return 0;
-        const content = fs.readFileSync(filePath, 'utf-8');
-        return content.split(/\r\n|\r|\n/).length;
-    } catch (e) {
-        console.warn(`Could not count lines for ${filePath}`);
-        return 0;
-    }
-}
-
-// POST seed database
+// ==========================================
+// POST seed database - Sync All Prompts
+// Scans ALL folders in project root
+// ==========================================
 router.post('/', async (req, res) => {
     try {
-        if (!fs.existsSync(APP_DIR)) {
-            return res.status(404).json({ error: `Directory not found: ${APP_DIR}` });
+        console.log(`\n🔄 Starting full project sync...`);
+        console.log(`📁 Project root: ${PROJECT_ROOT}`);
+
+        if (!fs.existsSync(PROJECT_ROOT)) {
+            return res.status(404).json({ error: `Project root not found: ${PROJECT_ROOT}` });
         }
 
-        const files = getFilesRecursively(APP_DIR);
+        // Scan all files in the project root
+        const { codeFiles, promptFiles } = scanProjectFiles(PROJECT_ROOT);
+
+        console.log(`📂 Found ${codeFiles.length} code files`);
+        console.log(`📝 Found ${promptFiles.length} prompt files`);
+
         const processed = [];
+        const processedCodePaths = new Set(); // Track which code files we've already processed
 
-        for (const filePath of files) {
-            const content = fs.readFileSync(filePath, 'utf-8');
-            const fileName = path.basename(filePath);
+        // ==========================================
+        // PHASE 1: Process prompt (.txt) files 
+        // These get full prompt parsing + link to code
+        // ==========================================
+        for (const promptFilePath of promptFiles) {
+            const promptContent = readFileSafe(promptFilePath);
+            if (!promptContent) continue;
 
-            const targetFilePathRelative = extractTargetFile(content, filePath);
-            const targetFilePathAbsolute = path.join(PROJECT_ROOT, targetFilePathRelative.split('/').join(path.sep));
+            const fileName = path.basename(promptFilePath);
 
-            // Handle MASTER_PROMPT or generic master prompts
-            if (fileName.includes('MASTER') || content.includes('MASTER NLP PROMPT')) {
-                const parsedMaster = parseMasterPrompt(content);
+            // Handle MASTER prompts
+            if (fileName.includes('MASTER') || promptContent.includes('MASTER NLP PROMPT')) {
+                const targetFilePathRelative = extractTargetFile(promptContent, promptFilePath);
+                const parsedMaster = parseMasterPrompt(promptContent);
                 await prisma.masterPrompt.upsert({
                     where: { pageFilePath: targetFilePathRelative },
                     update: parsedMaster,
@@ -403,30 +423,42 @@ router.post('/', async (req, res) => {
                 continue;
             }
 
-            // Handle regular prompt files
-            const sections = parsePromptFile(content);
+            // Find matching code file for this prompt
+            const matchingCodeFile = findMatchingPromptFile(promptFilePath, codeFiles.map(cf => cf))
+                ? promptFilePath.replace(/\.txt$/, '.js')
+                : deriveCodeFileFromPrompt(promptFilePath, codeFiles);
 
+            const targetFilePathRelative = path.relative(PROJECT_ROOT, matchingCodeFile).replace(/\\/g, '/');
+            const targetFilePathAbsolute = matchingCodeFile.includes(':')
+                ? matchingCodeFile
+                : path.join(PROJECT_ROOT, targetFilePathRelative.split('/').join(path.sep));
+
+            // Parse prompt sections
+            const sections = parsePromptFile(promptContent);
             if (sections.length === 0) {
-                console.log(`Skipping ${fileName}: No sections found`);
-                continue;
+                console.log(`  ⏩ Skipping ${fileName}: No sections found`);
             }
 
             const actualTotalLines = countLines(targetFilePathAbsolute);
 
-            // Delete existing page entry to full refresh
+            // Read the actual source code
+            const sourceCode = readFileSafe(targetFilePathAbsolute);
+
+            // Delete existing page entry to do a full refresh
             await prisma.page.deleteMany({ where: { filePath: targetFilePathRelative } });
 
             const jsFileName = path.basename(targetFilePathRelative);
             const componentName = jsFileName.replace(/\.(js|jsx|ts|tsx)$/, '');
 
+            // Store both prompt content AND source code
             await prisma.page.create({
                 data: {
                     filePath: targetFilePathRelative,
                     componentName: componentName,
                     totalLines: actualTotalLines || 0,
                     purpose: `Prompt file for ${jsFileName}`,
-                    promptFilePath: filePath,
-                    rawContent: content,
+                    promptFilePath: promptFilePath,
+                    rawContent: promptContent,
                     sections: {
                         create: sections.map(s => ({
                             name: s.name,
@@ -445,19 +477,103 @@ router.post('/', async (req, res) => {
                     }
                 }
             });
+
+            processedCodePaths.add(targetFilePathRelative);
             processed.push({
                 file: fileName,
                 type: 'page',
                 target: targetFilePathRelative,
                 lines: actualTotalLines,
-                sections: sections.length
+                sections: sections.length,
+                hasCode: !!sourceCode,
+                hasPrompt: true
             });
         }
 
-        res.json({ success: true, processed });
+        // ==========================================
+        // PHASE 2: Process code files WITHOUT prompts
+        // These are code-only entries (components, lib, contexts, etc.)
+        // ==========================================
+        for (const codeFilePath of codeFiles) {
+            const relPath = path.relative(PROJECT_ROOT, codeFilePath).replace(/\\/g, '/');
+
+            // Skip if already processed via prompt file
+            if (processedCodePaths.has(relPath)) continue;
+
+            // Skip config files in the root (next.config.js, tailwind.config.js, etc.)
+            const parts = relPath.split('/');
+            if (parts.length === 1) {
+                // Root-level file, skip config files
+                const rootFileName = parts[0].toLowerCase();
+                if (rootFileName.includes('config') || rootFileName.includes('env') || rootFileName === 'jsconfig.json') {
+                    continue;
+                }
+            }
+
+            const sourceCode = readFileSafe(codeFilePath);
+            if (!sourceCode) continue;
+
+            const totalLines = sourceCode.split(/\r\n|\r|\n/).length;
+            const fileName = path.basename(codeFilePath);
+            const componentName = fileName.replace(/\.(js|jsx|ts|tsx)$/, '');
+
+            // Determine folder for grouping
+            const folderPath = relPath.substring(0, relPath.lastIndexOf('/')) || 'root';
+
+            // Delete existing entry for refresh
+            await prisma.page.deleteMany({ where: { filePath: relPath } });
+
+            // Create page entry with source code as rawContent
+            await prisma.page.create({
+                data: {
+                    filePath: relPath,
+                    componentName: componentName,
+                    totalLines: totalLines,
+                    purpose: `Source code: ${folderPath}/${fileName}`,
+                    promptFilePath: null,
+                    rawContent: sourceCode,
+                    sections: {
+                        create: [] // No prompt sections for code-only files
+                    }
+                }
+            });
+
+            processedCodePaths.add(relPath);
+            processed.push({
+                file: fileName,
+                type: 'code',
+                target: relPath,
+                lines: totalLines,
+                sections: 0,
+                hasCode: true,
+                hasPrompt: false
+            });
+        }
+
+        // Summary
+        const promptCount = processed.filter(p => p.type === 'page').length;
+        const codeOnlyCount = processed.filter(p => p.type === 'code').length;
+        const masterCount = processed.filter(p => p.type === 'master').length;
+
+        console.log(`\n✅ Sync complete!`);
+        console.log(`   📝 ${promptCount} files with prompts`);
+        console.log(`   💻 ${codeOnlyCount} code-only files`);
+        console.log(`   🎯 ${masterCount} master prompts`);
+        console.log(`   📊 ${processed.length} total entries\n`);
+
+        res.json({
+            success: true,
+            processed,
+            summary: {
+                total: processed.length,
+                withPrompts: promptCount,
+                codeOnly: codeOnlyCount,
+                masterPrompts: masterCount
+            }
+        });
     } catch (error) {
         console.error('Seed error:', error);
-        res.status(500).json({ error: 'Failed to seed database' });
+        res.status(500).json({ error: 'Failed to seed database', details: error.message });
     }
 });
 

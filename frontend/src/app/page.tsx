@@ -50,6 +50,7 @@ interface Page {
     totalLines: number
     purpose: string
     rawContent: string | null
+    promptFilePath: string | null
     sections: Section[]
     stateVars: StateVar[]
     functions: PageFunc[]
@@ -105,12 +106,14 @@ const Badge = ({ children, color = 'blue' }: { children: React.ReactNode, color?
 }
 
 // Folder Card Component
-const FolderCard = ({ folderName, pages, onNavigateToFile, isExpanded, onToggle }: {
+const FolderCard = ({ folderName, pages, onNavigateToFile, isExpanded, onToggle, onGenerate, generatingFile }: {
     folderName: string
     pages: Page[]
     onNavigateToFile: (pageId: string) => void
     isExpanded: boolean
     onToggle: () => void
+    onGenerate: (filePath: string) => void
+    generatingFile: string | null
 }) => {
     const totalLines = pages.reduce((sum, p) => sum + p.totalLines, 0)
     const totalSections = pages.reduce((sum, p) => sum + p.sections.length, 0)
@@ -199,6 +202,22 @@ const FolderCard = ({ folderName, pages, onNavigateToFile, isExpanded, onToggle 
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+                                    {page.sections.length === 0 && !page.promptFilePath && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onGenerate(page.filePath)
+                                            }}
+                                            disabled={generatingFile === page.filePath}
+                                            className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold transition-all border ${generatingFile === page.filePath
+                                                    ? 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/30 cursor-wait animate-pulse'
+                                                    : 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 hover:from-emerald-500/30 hover:to-teal-500/30 active:scale-95'
+                                                }`}
+                                            title="Generate NLP & Developer prompts from code"
+                                        >
+                                            {generatingFile === page.filePath ? '⏳ Generating...' : '🧠 Generate'}
+                                        </button>
+                                    )}
                                     <div className="min-w-[35px] sm:min-w-[50px] text-center">
                                         <div className="text-xs sm:text-sm font-bold text-indigo-600 dark:text-indigo-400">{page.totalLines}</div>
                                         <div className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 uppercase">LOC</div>
@@ -667,6 +686,7 @@ export default function Home() {
     const [seeding, setSeeding] = useState(false)
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
     const [searchQuery, setSearchQuery] = useState('')
+    const [generatingFile, setGeneratingFile] = useState<string | null>(null)
 
     useEffect(() => {
         // Check auth before fetching
@@ -739,6 +759,31 @@ export default function Home() {
     // Navigate to prompt detail page
     const navigateToPrompt = (pageId: string) => {
         router.push(`/prompt/${pageId}`)
+    }
+
+    // Generate prompts for a code-only file
+    const handleGenerate = async (filePath: string) => {
+        setGeneratingFile(filePath)
+        setError(null)
+        try {
+            const result = await apiRequest('/api/generate-prompts', {
+                method: 'POST',
+                body: { filePath },
+                requiresAuth: false
+            })
+
+            if (result.success && result.data?.success) {
+                // Refresh data after generation + seed completed
+                await fetchData()
+            } else {
+                throw new Error(result.error || result.data?.error || 'Generation failed')
+            }
+        } catch (err) {
+            console.error('Generate error:', err)
+            setError(err instanceof Error ? err.message : 'Failed to generate prompts')
+        } finally {
+            setGeneratingFile(null)
+        }
     }
 
     // Group pages by folder
@@ -876,6 +921,8 @@ export default function Home() {
                                 isExpanded={expandedFolders.has(folderName) || !!searchQuery}
                                 onToggle={() => toggleFolder(folderName)}
                                 onNavigateToFile={navigateToPrompt}
+                                onGenerate={handleGenerate}
+                                generatingFile={generatingFile}
                             />
                         ))}
                     </div>

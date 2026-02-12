@@ -228,6 +228,50 @@ router.delete('/:projectId', async (req, res) => {
     }
 });
 
+// Open native Windows folder picker dialog (modern Explorer style)
+router.post('/pick-folder', async (req, res) => {
+    try {
+        const { exec } = require('child_process');
+        const scriptPath = path.join(__dirname, '..', 'scripts', 'folder-picker.ps1');
+
+        exec(
+            `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`,
+            { timeout: 120000 },
+            (error, stdout, stderr) => {
+                if (error) {
+                    console.error('Folder picker error:', error);
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Failed to open folder picker'
+                    });
+                }
+
+                const selectedPath = stdout.trim();
+
+                if (selectedPath === '::CANCELLED::' || !selectedPath || selectedPath.startsWith('::ERROR::')) {
+                    return res.json({
+                        success: true,
+                        cancelled: true,
+                        path: null
+                    });
+                }
+
+                res.json({
+                    success: true,
+                    cancelled: false,
+                    path: selectedPath.replace(/\\/g, '/')
+                });
+            }
+        );
+    } catch (error) {
+        console.error('Error opening folder picker:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to open folder picker'
+        });
+    }
+});
+
 // Browse directory (for folder selection)
 router.get('/browse', async (req, res) => {
     try {

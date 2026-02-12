@@ -129,9 +129,30 @@ export default function HomePage() {
         }
     };
 
-    const openBrowser = () => {
+    const openBrowser = async () => {
+        // Try native Windows folder picker first
+        try {
+            const result = await apiRequest('/api/projects/pick-folder', { method: 'POST' });
+
+            if (result.success && result.data?.success && !result.data?.cancelled && result.data?.path) {
+                // Native picker returned a folder — use it
+                setSelectedPath(result.data.path);
+                // Auto-fill project name if empty
+                if (!newProjectName) {
+                    const folderName = result.data.path.split('/').pop() || 'New Project';
+                    setNewProjectName(folderName.charAt(0).toUpperCase() + folderName.slice(1));
+                }
+                return;
+            }
+
+            // User cancelled the native dialog — fall through to in-browser browser
+        } catch (err) {
+            console.error('Native folder picker failed, falling back to browser:', err);
+        }
+
+        // Fallback: open in-browser file browser
         setBrowsing(true);
-        setBrowseHistory([]); // Reset history when opening browser
+        setBrowseHistory([]);
         browseDirectory(currentBrowsePath, false);
     };
 
