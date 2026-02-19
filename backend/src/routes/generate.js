@@ -238,8 +238,8 @@ router.post('/', async (req, res) => {
                 nlp: nlpVersion,
                 developer: devVersion
             },
-            provider: (process.env.LLM_PROVIDER || 'gemini').toLowerCase(),
-            model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+            provider: (process.env.LLM_PROVIDER || 'infinitai').toLowerCase(),
+            model: process.env.INFINITAI_MODEL || 'meta-llama/Llama-3.2-11B-Vision-Instruct',
             elapsed: `${elapsed}ms`,
             seedResult: seedResult.summary || null
         });
@@ -276,7 +276,7 @@ router.post('/', async (req, res) => {
         if (msg.includes('rate limit') || msg.includes('429') || msg.includes('quota')) {
             statusCode = 429;
             errorCategory = 'rate_limit';
-            userMessage = msg; // Already cleaned by gemini.js
+            userMessage = msg; // Already cleaned by infinitai.js
         } else if (msg.includes('invalid') || msg.includes('unauthorized') || msg.includes('API key')) {
             statusCode = 401;
             errorCategory = 'auth_error';
@@ -297,10 +297,10 @@ router.post('/', async (req, res) => {
             statusCode = 500;
             errorCategory = 'seed_error';
             userMessage = 'Prompts were generated successfully, but syncing the database failed. Try clicking "Sync All Prompts".';
-        } else if (msg.includes('GEMINI_API_KEY')) {
+        } else if (msg.includes('INFINITAI_API_KEY') || msg.includes('INFINITAI_BASE_URL') || msg.includes('INFINITAI_MODEL')) {
             statusCode = 500;
             errorCategory = 'config_error';
-            userMessage = 'Gemini API key is not configured. Please set GEMINI_API_KEY in the backend .env file.';
+            userMessage = 'InfinitAI configuration is incomplete. Please check INFINITAI_API_KEY, INFINITAI_BASE_URL, and INFINITAI_MODEL in the backend .env file.';
         } else {
             userMessage = msg.length > 200 ? msg.substring(0, 200) + '...' : msg;
         }

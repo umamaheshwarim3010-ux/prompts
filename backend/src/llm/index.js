@@ -2,7 +2,7 @@
  * LLM Provider Selector
  * 
  * Single internal contract for all LLM usage.
- * Provider is selected via LLM_PROVIDER env var (default: gemini).
+ * Provider is selected via LLM_PROVIDER env var (default: infinitai).
  * Swapping providers requires only environment variable changes.
  * 
  * Contract:
@@ -15,7 +15,7 @@ const crypto = require('crypto');
 
 // Provider registry - add new providers here
 const PROVIDERS = {
-    gemini: () => require('./gemini'),
+    infinitai: () => require('./infinitai'), // MaaS Provider (default)
     openai: () => require('./openai')
 };
 
@@ -23,7 +23,7 @@ const PROVIDERS = {
  * Get the active LLM provider based on LLM_PROVIDER env var.
  */
 function getProvider() {
-    const providerName = (process.env.LLM_PROVIDER || 'gemini').toLowerCase();
+    const providerName = (process.env.LLM_PROVIDER || 'infinitai').toLowerCase();
     const providerFactory = PROVIDERS[providerName];
 
     if (!providerFactory) {
@@ -89,8 +89,8 @@ function getLatestVersion(templateType) {
  */
 async function generatePrompt({ template, sourceCode, metadata = {} }) {
     const provider = getProvider();
-    const providerName = (process.env.LLM_PROVIDER || 'gemini').toLowerCase();
-    const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+    const providerName = (process.env.LLM_PROVIDER || 'infinitai').toLowerCase();
+    const modelName = process.env.INFINITAI_MODEL || 'meta-llama/Llama-3.2-11B-Vision-Instruct';
 
     // Compute hashes for traceability
     const sourceHash = crypto.createHash('sha256').update(sourceCode).digest('hex').substring(0, 12);

@@ -577,4 +577,130 @@ router.post('/', async (req, res) => {
     }
 });
 
+// ==========================================
+// GET /check-sync - Check if root folder is in sync with DB
+// Does NOT modify anything, read-only comparison
+// ==========================================
+router.get('/check-sync', async (req, res) => {
+    try {
+        if (!fs.existsSync(PROJECT_ROOT)) {
+            return res.json({
+                success: true,
+                inSync: false,
+                message: 'Project root not found',
+                details: { newFiles: [], removedFiles: [], modifiedFiles: [] }
+            });
+        }
+
+        // Scan current files on disk
+        const { codeFiles, promptFiles } = scanProjectFiles(PROJECT_ROOT);
+
+        // Get all disk file paths (relative)
+        const diskPromptPaths = new Set();
+        for (const pf of promptFiles) {
+            const fileName = path.basename(pf);
+            if (fileName.includes('MASTER') || readFileSafe(pf)?.includes('MASTER NLP PROMPT')) {
+                continue; // skip master prompts for this comparison
+            }
+            // Derive the code file path that would be stored in DB
+            const matchingCodeFile = deriveCodeFileFromPrompt(pf, codeFiles);
+            const relPath = path.relative(PROJECT_ROOT, matchingCodeFile).replace(/\\/g, '/');
+            diskPromptPaths.add(relPath);
+        }
+
+        const diskCodePaths = new Set();
+        for (const cf of codeFiles) {
+            const relPath = path.relative(PROJECT_ROOT, cf).replace(/\\/g, '/');
+            // Skip root-level config files (same logic as seed)
+            const parts = relPath.split('/');
+            if (parts.length === 1) {
+                const rootFileName = parts[0].toLowerCase();
+                if (rootFileName.includes('config') || rootFileName.includes('env') || rootFileName === 'jsconfig.json') {
+                    continue;
+                }
+            }
+            diskCodePaths.add(relPath);
+        }
+
+        const allDiskPaths = new Set([...diskPromptPaths, ...diskCodePaths]);
+
+        // Get all DB file paths
+        const dbPages = await prisma.page.findMany({
+            select: { filePath: true, updatedAt: true, promptFilePath: true }
+        });
+        const dbPaths = new Set(dbPages.map(p => p.filePath));
+
+        // Compare
+        const newFiles = []; // on disk but not in DB
+        const removedFiles = []; // in DB but not on disk
+        const modifiedFiles = []; // on disk AND in DB but prompt file changed
+
+        // Check for new files on disk not in DB
+        for (const diskPath of allDiskPaths) {
+            if (!dbPaths.has(diskPath)) {
+                newFiles.push(diskPath);
+            }
+        }
+
+        // Check for files in DB no longer on disk
+        for (const dbPath of dbPaths) {
+            if (!allDiskPaths.has(dbPath)) {
+                removedFiles.push(dbPath);
+            }
+        }
+
+        // Check for modified prompt files (compare file mtime vs DB updatedAt)
+        for (const dbPage of dbPages) {
+            if (dbPage.promptFilePath && allDiskPaths.has(dbPage.filePath)) {
+                try {
+                    if (fs.existsSync(dbPage.promptFilePath)) {
+                        const fileStat = fs.statSync(dbPage.promptFilePath);
+                        const fileMtime = fileStat.mtime;
+                        const dbUpdated = new Date(dbPage.updatedAt);
+                        // If the file on disk was modified after the DB record
+                        if (fileMtime > dbUpdated) {
+                            modifiedFiles.push(dbPage.filePath);
+                        }
+                    }
+                } catch (e) {
+                    // Ignore stat errors
+                }
+            }
+        }
+
+        const totalChanges = newFiles.length + removedFiles.length + modifiedFiles.length;
+        const inSync = totalChanges === 0;
+
+        let message = '';
+        if (inSync) {
+            message = 'Everything is in sync';
+        } else {
+            const parts = [];
+            if (newFiles.length > 0) parts.push(`${newFiles.length} new file(s)`);
+            if (modifiedFiles.length > 0) parts.push(`${modifiedFiles.length} modified file(s)`);
+            if (removedFiles.length > 0) parts.push(`${removedFiles.length} removed file(s)`);
+            message = `Root folder has changes: ${parts.join(', ')}`;
+        }
+
+        res.json({
+            success: true,
+            inSync,
+            totalChanges,
+            message,
+            details: {
+                newFiles,
+                removedFiles,
+                modifiedFiles
+            }
+        });
+    } catch (error) {
+        console.error('Check-sync error:', error);
+        res.status(500).json({
+            success: false,
+            inSync: true, // Default to in-sync on error to not show false warnings
+            message: 'Failed to check sync status'
+        });
+    }
+});
+
 module.exports = router;

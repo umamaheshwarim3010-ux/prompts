@@ -12,6 +12,7 @@ const authRouter = require('./routes/auth');
 const projectsRouter = require('./routes/projects');
 const codeRouter = require('./routes/code');
 const generateRouter = require('./routes/generate');
+const chatRouter = require('./routes/chat');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -42,6 +43,7 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRouter);
 app.use('/api/seed', seedRouter); // Temporarily public for local database seeding
 app.use('/api/generate-prompts', generateRouter); // Temporarily public for local generation
+app.use('/api/chat', chatRouter); // Chat with InfinitAI
 
 // Health check - public
 app.get('/api/health', (req, res) => {

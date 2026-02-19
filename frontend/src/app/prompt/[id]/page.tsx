@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { apiRequest, getAccessToken, clearAuthData } from '@/lib/api'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
@@ -76,13 +76,17 @@ const Sidebar = ({
     onCategoryChange,
     onOverviewClick,
     isOverviewActive,
-    page
+    page,
+    collapsed,
+    onToggle
 }: {
     activeCategory: 'FRONTEND' | 'BACKEND' | 'DATABASE' | null,
     onCategoryChange: (cat: 'FRONTEND' | 'BACKEND' | 'DATABASE' | null) => void,
     onOverviewClick: () => void,
     isOverviewActive: boolean,
-    page: Page
+    page: Page,
+    collapsed: boolean,
+    onToggle: () => void
 }) => {
     const categories = [
         { id: 'FRONTEND' as const, label: 'Frontend', icon: '🖥️' },
@@ -94,52 +98,56 @@ const Sidebar = ({
     const logicBlocks = page.functions?.length || 0
 
     return (
-        <aside className="prompt-sidebar">
+        <aside className={`prompt-sidebar ${collapsed ? 'collapsed' : ''}`}>
             {/* Dashboard Header */}
             <div className="sidebar-header">
-                <button className="sidebar-menu-btn">
+                <button className="sidebar-menu-btn" onClick={onToggle} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M3 12h18M3 6h18M3 18h18" />
                     </svg>
                 </button>
-                <span className="sidebar-title">DASHBOARD</span>
+                {!collapsed && <span className="sidebar-title">DASHBOARD</span>}
             </div>
 
-            {/* Categories */}
-            <div className="sidebar-section">
-                <div className="sidebar-section-label">CATEGORIES</div>
-                {categories.map(cat => (
-                    <button
-                        key={cat.id}
-                        onClick={() => onCategoryChange(activeCategory === cat.id ? null : cat.id)}
-                        className={`sidebar-category-btn ${activeCategory === cat.id ? 'active' : ''}`}
-                    >
-                        <span className="sidebar-cat-icon">{cat.icon}</span>
-                        <span>{cat.label}</span>
-                    </button>
-                ))}
-                {/* Overview Button */}
-                <button
-                    onClick={onOverviewClick}
-                    className={`sidebar-category-btn ${isOverviewActive ? 'active' : ''}`}
-                >
-                    <span className="sidebar-cat-icon">📋</span>
-                    <span>Overview</span>
-                </button>
-            </div>
+            {!collapsed && (
+                <>
+                    {/* Categories */}
+                    <div className="sidebar-section">
+                        <div className="sidebar-section-label">CATEGORIES</div>
+                        {categories.map(cat => (
+                            <button
+                                key={cat.id}
+                                onClick={() => onCategoryChange(activeCategory === cat.id ? null : cat.id)}
+                                className={`sidebar-category-btn ${activeCategory === cat.id ? 'active' : ''}`}
+                            >
+                                <span className="sidebar-cat-icon">{cat.icon}</span>
+                                <span>{cat.label}</span>
+                            </button>
+                        ))}
+                        {/* Overview Button */}
+                        <button
+                            onClick={onOverviewClick}
+                            className={`sidebar-category-btn ${isOverviewActive ? 'active' : ''}`}
+                        >
+                            <span className="sidebar-cat-icon">📋</span>
+                            <span>Overview</span>
+                        </button>
+                    </div>
 
-            {/* File Stats */}
-            <div className="sidebar-section">
-                <div className="sidebar-section-label">FILE STATS</div>
-                <div className="sidebar-stat-card">
-                    <div className="stat-label">LINES OF CODE</div>
-                    <div className="stat-value">{page.totalLines}</div>
-                </div>
-                <div className="sidebar-stat-card">
-                    <div className="stat-label">LOGIC BLOCKS</div>
-                    <div className="stat-value">{logicBlocks}</div>
-                </div>
-            </div>
+                    {/* File Stats */}
+                    <div className="sidebar-section">
+                        <div className="sidebar-section-label">FILE STATS</div>
+                        <div className="sidebar-stat-card">
+                            <div className="stat-label">LINES OF CODE</div>
+                            <div className="stat-value">{page.totalLines}</div>
+                        </div>
+                        <div className="sidebar-stat-card">
+                            <div className="stat-label">LOGIC BLOCKS</div>
+                            <div className="stat-value">{logicBlocks}</div>
+                        </div>
+                    </div>
+                </>
+            )}
         </aside>
     )
 }
@@ -168,7 +176,9 @@ const CopyButton = ({ text }: { text: string }) => {
 export default function PromptDetailPage() {
     const router = useRouter()
     const params = useParams()
+    const searchParams = useSearchParams()
     const pageId = params.id as string
+    const isEmbedded = searchParams.get('embedded') === 'true'
 
     const [page, setPage] = useState<Page | null>(null)
     const [masterPrompt, setMasterPrompt] = useState<MasterPrompt | null>(null)
@@ -189,6 +199,9 @@ export default function PromptDetailPage() {
     const [savingCode, setSavingCode] = useState(false)
     const [sourceFilePath, setSourceFilePath] = useState<string>('')
     const [sourceLastModified, setSourceLastModified] = useState<string>('')
+    const [isGenerating, setIsGenerating] = useState(false)
+    const [generateStatus, setGenerateStatus] = useState<string>('')
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
     useEffect(() => {
         const token = getAccessToken()
@@ -300,6 +313,48 @@ export default function PromptDetailPage() {
         document.body.appendChild(element)
         element.click()
         document.body.removeChild(element)
+    }
+
+    // Generate prompts from source code via LLM
+    const handleGenerate = async () => {
+        if (!page || isGenerating) return
+        setIsGenerating(true)
+        setGenerateStatus('Loading templates...')
+        try {
+            setGenerateStatus('Generating NLP & Developer prompts...')
+            const result = await apiRequest<{
+                success: boolean
+                promptFilePath: string
+                elapsed: string
+                error?: string
+                errorCategory?: string
+            }>('/api/generate-prompts', {
+                method: 'POST',
+                body: { filePath: page.filePath }
+            })
+
+            if (result.success && result.data?.success) {
+                setGenerateStatus('Syncing database...')
+                // Wait a brief moment for sync to settle
+                await new Promise(resolve => setTimeout(resolve, 500))
+                setGenerateStatus('Refreshing page data...')
+                // Re-fetch page data to show the new prompts
+                await fetchPageData()
+                setGenerateStatus('')
+                alert(`✅ Prompts generated successfully!\n\n📄 File: ${result.data.promptFilePath}\n⏱ Elapsed: ${result.data.elapsed}`)
+            } else {
+                const errorMsg = result.data?.error || result.error || 'Generation failed'
+                setGenerateStatus('')
+                alert(`❌ Generation failed:\n${errorMsg}`)
+            }
+        } catch (err) {
+            console.error('Generate error:', err)
+            setGenerateStatus('')
+            alert('❌ Failed to generate prompts. Check the backend console for details.')
+        } finally {
+            setIsGenerating(false)
+            setGenerateStatus('')
+        }
     }
 
     const handleSave = async () => {
@@ -434,30 +489,46 @@ export default function PromptDetailPage() {
     }
 
     // Apply focused filter (FRONTEND/BACKEND/DATABASE)
+    // Extracts content from ### Frontend/Backend/Database to the next ###
     const applyFocusedFilter = (content: string): string => {
         if (!focusedFilter || !content) return content
         const contentLines = content.split('\n')
         const filteredLines: string[] = []
-        let currentBlock: 'FRONTEND' | 'BACKEND' | 'DATABASE' | null = null
-        let includeBlock = false
+        let insideMatchingBlock = false
 
         for (const line of contentLines) {
             const lowerLine = line.trim().toLowerCase()
-            if (lowerLine.startsWith('### frontend')) {
-                currentBlock = 'FRONTEND'
-                includeBlock = currentBlock === focusedFilter
-            } else if (lowerLine.startsWith('### backend')) {
-                currentBlock = 'BACKEND'
-                includeBlock = currentBlock === focusedFilter
-            } else if (lowerLine.startsWith('### database')) {
-                currentBlock = 'DATABASE'
-                includeBlock = currentBlock === focusedFilter
-            } else if (lowerLine.startsWith('###')) {
-                currentBlock = null
-                includeBlock = false
+
+            // Only treat lines starting with exactly "### " (3 hashes + space)
+            // as section boundaries. Lines with "#### " (4+ hashes) are
+            // sub-headings within a section and should NOT break the block.
+            const isH3Heading = lowerLine.startsWith('### ') && !lowerLine.startsWith('#### ')
+
+            if (isH3Heading) {
+                // Determine which block this heading starts
+                if (lowerLine.startsWith('### frontend')) {
+                    insideMatchingBlock = focusedFilter === 'FRONTEND'
+                } else if (lowerLine.startsWith('### backend')) {
+                    insideMatchingBlock = focusedFilter === 'BACKEND'
+                } else if (lowerLine.startsWith('### database')) {
+                    insideMatchingBlock = focusedFilter === 'DATABASE'
+                } else {
+                    // Any other ### heading ends the current block
+                    insideMatchingBlock = false
+                }
             }
-            if (includeBlock) filteredLines.push(line)
+
+            // Also stop at section-level delimiters (=== lines) to avoid
+            // bleeding into other major sections
+            if (lowerLine.startsWith('===') && insideMatchingBlock && filteredLines.length > 0) {
+                insideMatchingBlock = false
+            }
+
+            if (insideMatchingBlock) {
+                filteredLines.push(line)
+            }
         }
+
         return filteredLines.join('\n')
     }
 
@@ -493,27 +564,12 @@ export default function PromptDetailPage() {
     const renderFormattedContent = (content: string) => {
         if (!content) return <p className="no-content-text">No content found for this section.</p>
 
-        let currentBlock: 'FRONTEND' | 'BACKEND' | 'DATABASE' | null = null
-
         return content.split('\n').map((line, i) => {
             const trimmed = line.trim()
-            const lowerLine = trimmed.toLowerCase()
 
-            // Track blocks
-            if (lowerLine.startsWith('### frontend')) currentBlock = 'FRONTEND'
-            else if (lowerLine.startsWith('### backend')) currentBlock = 'BACKEND'
-            else if (lowerLine.startsWith('### database')) currentBlock = 'DATABASE'
-            else if (lowerLine.startsWith('###')) currentBlock = null
-
-            // Determine if this line should be highlighted or dimmed
+            // When focusedFilter is active, content is already extracted
+            // so every line belongs to the matched section — no dimming needed
             let lineClass = 'content-line'
-            if (focusedFilter) {
-                if (currentBlock === focusedFilter) {
-                    lineClass += ` highlight-active highlight-${focusedFilter.toLowerCase()}`
-                } else {
-                    lineClass += ' highlight-dimmed'
-                }
-            }
 
             // Style based on content
             if (trimmed.startsWith('SECTION ') || trimmed.startsWith('===')) {
@@ -521,6 +577,9 @@ export default function PromptDetailPage() {
             }
             if (trimmed.startsWith('### ')) {
                 return <span key={i} className={`${lineClass} content-h3`}>{line}{'\n'}</span>
+            }
+            if (trimmed.startsWith('#### ')) {
+                return <span key={i} className={`${lineClass} content-h4`}>{line}{'\n'}</span>
             }
             if (trimmed.startsWith('**') && trimmed.endsWith('**')) {
                 return <span key={i} className={`${lineClass} content-bold`}>{line}{'\n'}</span>
@@ -539,8 +598,8 @@ export default function PromptDetailPage() {
     }
 
     return (
-        <div className={`prompt-detail-layout ${isFullscreen ? 'fullscreen' : ''}`}>
-            {/* Sidebar */}
+        <div className={`prompt-detail-layout ${isFullscreen ? 'fullscreen' : ''} ${isEmbedded ? 'embedded' : ''}`}>
+            {/* Sidebar — hidden only in fullscreen mode */}
             {!isFullscreen && (
                 <Sidebar
                     activeCategory={focusedFilter}
@@ -554,6 +613,8 @@ export default function PromptDetailPage() {
                     }}
                     isOverviewActive={isOverview && !focusedFilter}
                     page={page}
+                    collapsed={sidebarCollapsed}
+                    onToggle={() => setSidebarCollapsed(prev => !prev)}
                 />
             )}
 
@@ -562,11 +623,14 @@ export default function PromptDetailPage() {
                 {/* Top Header Bar */}
                 <header className="prompt-topbar">
                     <div className="topbar-left">
-                        <button onClick={() => router.push('/')} className="topbar-back-btn" title="Back to Dashboard">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <path d="M15 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                        </button>
+                        {/* Back button — hidden in embedded mode */}
+                        {!isEmbedded && (
+                            <button onClick={() => router.push('/')} className="topbar-back-btn" title="Back to Dashboard">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <path d="M15 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            </button>
+                        )}
                         <div className="topbar-file-icon">
                             {fileInitials}
                         </div>
@@ -579,11 +643,25 @@ export default function PromptDetailPage() {
                     <div className="topbar-right">
                         {page.rawContent && (
                             <>
-                                <button className="topbar-action-btn generate-btn">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                    Generate
+                                <button
+                                    className={`topbar-action-btn generate-btn ${isGenerating ? 'generating' : ''}`}
+                                    onClick={handleGenerate}
+                                    disabled={isGenerating}
+                                    title={isGenerating ? generateStatus : 'Generate prompts from source code'}
+                                >
+                                    {isGenerating ? (
+                                        <>
+                                            <span className="generate-spinner" />
+                                            {generateStatus || 'Generating...'}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                            Generate
+                                        </>
+                                    )}
                                 </button>
                                 <button onClick={downloadFile} className="topbar-action-btn download-btn">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -603,7 +681,31 @@ export default function PromptDetailPage() {
                                 <ThemeToggle />
                             </>
                         )}
-                        {!page.rawContent && <ThemeToggle />}
+                        {!page.rawContent && (
+                            <>
+                                <button
+                                    className={`topbar-action-btn generate-btn ${isGenerating ? 'generating' : ''}`}
+                                    onClick={handleGenerate}
+                                    disabled={isGenerating}
+                                    title={isGenerating ? generateStatus : 'Generate prompts from source code'}
+                                >
+                                    {isGenerating ? (
+                                        <>
+                                            <span className="generate-spinner" />
+                                            {generateStatus || 'Generating...'}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                            Generate
+                                        </>
+                                    )}
+                                </button>
+                                <ThemeToggle />
+                            </>
+                        )}
                     </div>
                 </header>
 
@@ -749,7 +851,7 @@ export default function PromptDetailPage() {
                                     id={`editor-${page.id}`}
                                     className="editor-textarea single"
                                     defaultValue={displayContent}
-                                    readOnly={true}
+                                    readOnly={!!focusedFilter}
                                 />
                             )}
                         </div>
@@ -920,7 +1022,7 @@ export default function PromptDetailPage() {
                         </>
                     )}
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     )
 }
