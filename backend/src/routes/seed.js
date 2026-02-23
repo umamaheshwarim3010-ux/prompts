@@ -5,7 +5,7 @@ const { prisma } = require('../lib/prisma');
 
 const router = express.Router();
 
-// Helper to find project root
+// Helper to find project root (fallback for non-project-scoped calls)
 const findProjectRoot = () => {
     let candidates = [];
     if (process.env.PROJECT_ROOT) {
@@ -364,32 +364,55 @@ function parseMasterPrompt(content) {
     return { nlpInstruction, sectionsSummary, queryExamples };
 }
 
-function extractTargetFile(content, fullPath) {
+function extractTargetFile(content, fullPath, rootDir) {
     const match = content.match(/FILE:\s*([^\s|]+)/i);
     if (match) {
         return match[1].trim().replace(/\\/g, '/');
     }
 
-    let relative = path.relative(PROJECT_ROOT, fullPath);
+    let relative = path.relative(rootDir, fullPath);
     relative = relative.replace(/\.txt$/, '.js');
     return relative.replace(/\\/g, '/');
 }
 
 // ==========================================
 // POST seed database - Sync All Prompts
-// Scans ALL folders in project root
+// Accepts optional projectId to scope the sync
 // ==========================================
 router.post('/', async (req, res) => {
     try {
-        console.log(`\n🔄 Starting full project sync...`);
-        console.log(`📁 Project root: ${PROJECT_ROOT}`);
+        const { projectId } = req.body || {};
 
-        if (!fs.existsSync(PROJECT_ROOT)) {
-            return res.status(404).json({ error: `Project root not found: ${PROJECT_ROOT}` });
+        // Determine root directory
+        let rootDir = PROJECT_ROOT;
+
+        if (projectId) {
+            // Look up the project from DB to get its path
+            const project = await prisma.project.findUnique({
+                where: { id: projectId }
+            });
+            if (!project) {
+                return res.status(404).json({ error: 'Project not found' });
+            }
+            rootDir = project.path.replace(/\//g, path.sep);
         }
 
-        // Scan all files in the project root
-        const { codeFiles, promptFiles } = scanProjectFiles(PROJECT_ROOT);
+        console.log(`\n🔄 Starting ${projectId ? 'project-scoped' : 'full'} sync...`);
+        console.log(`📁 Root directory: ${rootDir}`);
+        if (projectId) console.log(`🔗 Project ID: ${projectId}`);
+
+        if (!fs.existsSync(rootDir)) {
+            return res.status(404).json({ error: `Root directory not found: ${rootDir}` });
+        }
+
+        // If project-scoped, delete all existing pages and masters for this project first
+        if (projectId) {
+            await prisma.page.deleteMany({ where: { projectId } });
+            await prisma.masterPrompt.deleteMany({ where: { projectId } });
+        }
+
+        // Scan all files in the root directory
+        const { codeFiles, promptFiles } = scanProjectFiles(rootDir);
 
         console.log(`📂 Found ${codeFiles.length} code files`);
         console.log(`📝 Found ${promptFiles.length} prompt files`);
@@ -409,16 +432,34 @@ router.post('/', async (req, res) => {
 
             // Handle MASTER prompts
             if (fileName.includes('MASTER') || promptContent.includes('MASTER NLP PROMPT')) {
-                const targetFilePathRelative = extractTargetFile(promptContent, promptFilePath);
+                const targetFilePathRelative = extractTargetFile(promptContent, promptFilePath, rootDir);
                 const parsedMaster = parseMasterPrompt(promptContent);
-                await prisma.masterPrompt.upsert({
-                    where: { pageFilePath: targetFilePathRelative },
-                    update: parsedMaster,
-                    create: {
-                        pageFilePath: targetFilePathRelative,
-                        ...parsedMaster
-                    }
-                });
+
+                if (projectId) {
+                    // Project-scoped: just create (we deleted all at start)
+                    await prisma.masterPrompt.create({
+                        data: {
+                            pageFilePath: targetFilePathRelative,
+                            projectId,
+                            ...parsedMaster
+                        }
+                    });
+                } else {
+                    // Legacy: upsert without projectId
+                    await prisma.masterPrompt.upsert({
+                        where: {
+                            projectId_pageFilePath: {
+                                projectId: null,
+                                pageFilePath: targetFilePathRelative
+                            }
+                        },
+                        update: parsedMaster,
+                        create: {
+                            pageFilePath: targetFilePathRelative,
+                            ...parsedMaster
+                        }
+                    });
+                }
                 processed.push({ file: fileName, type: 'master', target: targetFilePathRelative });
                 continue;
             }
@@ -428,10 +469,10 @@ router.post('/', async (req, res) => {
                 ? promptFilePath.replace(/\.txt$/, '.js')
                 : deriveCodeFileFromPrompt(promptFilePath, codeFiles);
 
-            const targetFilePathRelative = path.relative(PROJECT_ROOT, matchingCodeFile).replace(/\\/g, '/');
+            const targetFilePathRelative = path.relative(rootDir, matchingCodeFile).replace(/\\/g, '/');
             const targetFilePathAbsolute = matchingCodeFile.includes(':')
                 ? matchingCodeFile
-                : path.join(PROJECT_ROOT, targetFilePathRelative.split('/').join(path.sep));
+                : path.join(rootDir, targetFilePathRelative.split('/').join(path.sep));
 
             // Parse prompt sections
             const sections = parsePromptFile(promptContent);
@@ -444,8 +485,10 @@ router.post('/', async (req, res) => {
             // Read the actual source code
             const sourceCode = readFileSafe(targetFilePathAbsolute);
 
-            // Delete existing page entry to do a full refresh
-            await prisma.page.deleteMany({ where: { filePath: targetFilePathRelative } });
+            // For non-project-scoped, delete existing entry for this file
+            if (!projectId) {
+                await prisma.page.deleteMany({ where: { filePath: targetFilePathRelative, projectId: null } });
+            }
 
             const jsFileName = path.basename(targetFilePathRelative);
             const componentName = jsFileName.replace(/\.(js|jsx|ts|tsx)$/, '');
@@ -459,6 +502,7 @@ router.post('/', async (req, res) => {
                     purpose: `Prompt file for ${jsFileName}`,
                     promptFilePath: promptFilePath,
                     rawContent: promptContent,
+                    projectId: projectId || null,
                     sections: {
                         create: sections.map(s => ({
                             name: s.name,
@@ -495,7 +539,7 @@ router.post('/', async (req, res) => {
         // These are code-only entries (components, lib, contexts, etc.)
         // ==========================================
         for (const codeFilePath of codeFiles) {
-            const relPath = path.relative(PROJECT_ROOT, codeFilePath).replace(/\\/g, '/');
+            const relPath = path.relative(rootDir, codeFilePath).replace(/\\/g, '/');
 
             // Skip if already processed via prompt file
             if (processedCodePaths.has(relPath)) continue;
@@ -520,8 +564,10 @@ router.post('/', async (req, res) => {
             // Determine folder for grouping
             const folderPath = relPath.substring(0, relPath.lastIndexOf('/')) || 'root';
 
-            // Delete existing entry for refresh
-            await prisma.page.deleteMany({ where: { filePath: relPath } });
+            // For non-project-scoped, delete existing entry for refresh
+            if (!projectId) {
+                await prisma.page.deleteMany({ where: { filePath: relPath, projectId: null } });
+            }
 
             // Create page entry with source code as rawContent
             await prisma.page.create({
@@ -532,6 +578,7 @@ router.post('/', async (req, res) => {
                     purpose: `Source code: ${folderPath}/${fileName}`,
                     promptFilePath: null,
                     rawContent: sourceCode,
+                    projectId: projectId || null,
                     sections: {
                         create: [] // No prompt sections for code-only files
                     }
@@ -579,21 +626,41 @@ router.post('/', async (req, res) => {
 
 // ==========================================
 // GET /check-sync - Check if root folder is in sync with DB
-// Does NOT modify anything, read-only comparison
+// Supports optional projectId query parameter
 // ==========================================
 router.get('/check-sync', async (req, res) => {
     try {
-        if (!fs.existsSync(PROJECT_ROOT)) {
+        const { projectId } = req.query;
+
+        // Determine root directory
+        let rootDir = PROJECT_ROOT;
+
+        if (projectId) {
+            const project = await prisma.project.findUnique({
+                where: { id: projectId }
+            });
+            if (!project) {
+                return res.json({
+                    success: true,
+                    inSync: false,
+                    message: 'Project not found',
+                    details: { newFiles: [], removedFiles: [], modifiedFiles: [] }
+                });
+            }
+            rootDir = project.path.replace(/\//g, path.sep);
+        }
+
+        if (!fs.existsSync(rootDir)) {
             return res.json({
                 success: true,
                 inSync: false,
-                message: 'Project root not found',
+                message: 'Root directory not found',
                 details: { newFiles: [], removedFiles: [], modifiedFiles: [] }
             });
         }
 
         // Scan current files on disk
-        const { codeFiles, promptFiles } = scanProjectFiles(PROJECT_ROOT);
+        const { codeFiles, promptFiles } = scanProjectFiles(rootDir);
 
         // Get all disk file paths (relative)
         const diskPromptPaths = new Set();
@@ -604,13 +671,13 @@ router.get('/check-sync', async (req, res) => {
             }
             // Derive the code file path that would be stored in DB
             const matchingCodeFile = deriveCodeFileFromPrompt(pf, codeFiles);
-            const relPath = path.relative(PROJECT_ROOT, matchingCodeFile).replace(/\\/g, '/');
+            const relPath = path.relative(rootDir, matchingCodeFile).replace(/\\/g, '/');
             diskPromptPaths.add(relPath);
         }
 
         const diskCodePaths = new Set();
         for (const cf of codeFiles) {
-            const relPath = path.relative(PROJECT_ROOT, cf).replace(/\\/g, '/');
+            const relPath = path.relative(rootDir, cf).replace(/\\/g, '/');
             // Skip root-level config files (same logic as seed)
             const parts = relPath.split('/');
             if (parts.length === 1) {
@@ -624,8 +691,10 @@ router.get('/check-sync', async (req, res) => {
 
         const allDiskPaths = new Set([...diskPromptPaths, ...diskCodePaths]);
 
-        // Get all DB file paths
+        // Get all DB file paths (scoped by projectId if provided)
+        const dbWhere = projectId ? { projectId } : {};
         const dbPages = await prisma.page.findMany({
+            where: dbWhere,
             select: { filePath: true, updatedAt: true, promptFilePath: true }
         });
         const dbPaths = new Set(dbPages.map(p => p.filePath));
@@ -675,11 +744,11 @@ router.get('/check-sync', async (req, res) => {
         if (inSync) {
             message = 'Everything is in sync';
         } else {
-            const parts = [];
-            if (newFiles.length > 0) parts.push(`${newFiles.length} new file(s)`);
-            if (modifiedFiles.length > 0) parts.push(`${modifiedFiles.length} modified file(s)`);
-            if (removedFiles.length > 0) parts.push(`${removedFiles.length} removed file(s)`);
-            message = `Root folder has changes: ${parts.join(', ')}`;
+            const msgParts = [];
+            if (newFiles.length > 0) msgParts.push(`${newFiles.length} new file(s)`);
+            if (modifiedFiles.length > 0) msgParts.push(`${modifiedFiles.length} modified file(s)`);
+            if (removedFiles.length > 0) msgParts.push(`${removedFiles.length} removed file(s)`);
+            message = `Root folder has changes: ${msgParts.join(', ')}`;
         }
 
         res.json({
