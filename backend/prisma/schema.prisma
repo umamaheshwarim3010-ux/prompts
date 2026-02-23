@@ -10,21 +10,24 @@ datasource db {
 // Pages/Files table - stores information about each code file
 model Page {
   id            String    @id @default(cuid())
-  filePath      String    @unique
+  filePath      String
   componentName String
   totalLines    Int
   purpose       String
   promptFilePath String?   // Path to the source .txt file
   rawContent    String?   // Store the full original text content
+  projectId     String?   // Link to project for multi-project isolation
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  project       Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sections      Section[]
   stateVars     StateVar[]
   functions     Function[]
   dependencies  Dependency[] @relation("FromPage")
   dependents    Dependency[] @relation("ToPage")
 
+  @@unique([projectId, filePath])
   @@map("pages")
 }
 
@@ -118,13 +121,17 @@ model Dependency {
 // Master NLP prompt template for a page
 model MasterPrompt {
   id              String   @id @default(cuid())
-  pageFilePath    String   @unique
+  pageFilePath    String
   nlpInstruction  String
   sectionsSummary String
   queryExamples   String
+  projectId       String?  // Link to project for multi-project isolation
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  project         Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, pageFilePath])
   @@map("master_prompts")
 }
 
@@ -154,7 +161,9 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pages         Page[]
+  masterPrompts MasterPrompt[]
 
   @@unique([userId, path])
   @@map("projects")
