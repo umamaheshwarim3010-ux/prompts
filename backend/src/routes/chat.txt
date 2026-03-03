@@ -1,0 +1,229 @@
+================================================================================
+              GENERATED PROMPT (chat.js)
+================================================================================
+Generated: 2026-03-03T11:21:28.497Z
+NLP Template: nlp/v1
+Developer Template: developer/v1
+
+================================================================================
+SECTION 1: NLP (USER-DEFINED) - Context & Behavior
+================================================================================
+
+### Frontend
+
+**Streaming Chat Interface**
+- What it does: Allows users to send messages to a chat interface, which streams the response from a Large Language Model (LLM) in real-time.
+- When it happens: When a user sends a message, the interface sends a request to the server, which then streams the response from the LLM.
+- Why it matters: The streaming interface provides a dynamic and interactive way for users to engage with the chat system.
+- this page have the logout button in the top right corner in red color and animate when mouse hovers just the ui not need of a logout functionality
+
+**Non-Streaming Chat Interface (Fallback)**
+- What it does: Provides a non-streaming chat interface that sends a single request to the server and receives a response from the LLM.
+- When it happens: When the user clicks the "Sync" button, the interface sends a single request to the server, which then returns a response from the LLM.
+- Why it matters: The non-streaming interface provides a fallback option for users who may not have a stable internet connection or prefer a more traditional chat experience.
+
+**Auto-Response**
+- What it does: The system automatically responds to user input with a response from the LLM.
+- When it happens: When the user sends a message, the system sends a request to the server, which then streams the response from the LLM.
+- Why it matters: The auto-response feature provides an interactive and engaging experience for users.
+
+**Error Handling**
+- What it does: The system handles errors that may occur during the chat process, such as network errors or API errors.
+- When it happens: When an error occurs, the system displays an error message to the user and logs the error for debugging purposes.
+- Why it matters: Error handling ensures that the system provides a reliable and stable experience for users.
+
+**Restrictions and Protective Measures**
+- What it does: The system has restrictions and protective measures in place to prevent abuse and ensure a safe experience for users.
+- When it happens: These measures are enforced at the server level, and users who attempt to abuse the system may be blocked or restricted.
+- Why it matters: Restrictions and protective measures help to maintain the integrity and security of the system.
+
+### Backend
+
+**InfinitAI Configuration**
+- What it handles: The system retrieves configuration settings from environment variables, such as the InfinitAI API key and base URL.
+- How it protects or validates: The system checks for the presence of required configuration settings and throws an error if they are missing.
+- What happens if conditions are not met: If the configuration settings are missing, the system throws an error and prevents the chat process from proceeding.
+
+**Chat Request Processing**
+- What it handles: The system processes chat requests from users, including sending requests to the LLM and streaming responses back to the user.
+- How it protects or validates: The system checks for valid chat requests and throws an error if the request is invalid.
+- What happens if conditions are not met: If the chat request is invalid, the system throws an error and prevents the chat process from proceeding.
+
+**LLM Request and Response Handling**
+- What it handles: The system sends requests to the LLM and handles responses from the LLM.
+- How it protects or validates: The system checks for valid responses from the LLM and throws an error if the response is invalid.
+- What happens if conditions are not met: If the response from the LLM is invalid, the system throws an error and prevents the chat process from proceeding.
+
+### Database
+
+**No Database Information**
+- The provided source code does not include any database-related information, so there is no data to describe.
+
+================================================================================
+SECTION 2: DEVELOPER PROMPTS - Technical & Precise
+================================================================================
+
+### FRONTEND:
+----------------------------------------------------
+
+FILE METADATA:
+  Path: Not Explicitly Defined in Provided Code
+  Language: Not Explicitly Defined in Provided Code
+  Framework (if identifiable): Not Explicitly Defined in Provided Code
+  Component/Module Type: Not Explicitly Defined in Provided Code
+  Exports/Public Interfaces: Not Explicitly Defined in Provided Code
+
+IMPORTS / DEPENDENCIES:
+  - Internal Modules: express
+  - External Libraries: Not Explicitly Defined in Provided Code
+
+STRUCTURE:
+  - Component/Class/Function Name: Not Explicitly Defined in Provided Code
+  - Props/Inputs: Not Explicitly Defined in Provided Code
+  - State Variables (with inferred types): Not Explicitly Defined in Provided Code
+  - Derived State: Not Explicitly Defined in Provided Code
+  - Context Usage: Not Explicitly Defined in Provided Code
+  - Refs (if present): Not Explicitly Defined in Provided Code
+
+CORE MECHANISMS:
+1. Feature Name: Not Explicitly Defined in Provided Code
+   - Trigger: Not Explicitly Defined in Provided Code
+   - Execution Flow: Not Explicitly Defined in Provided Code
+   - Conditional Logic: Not Explicitly Defined in Provided Code
+   - Payload Structure: Not Explicitly Defined in Provided Code
+   - External Calls: Not Explicitly Defined in Provided Code
+   - Timing Logic (if any): Not Explicitly Defined in Provided Code
+   - Constraints: Not Explicitly Defined in Provided Code
+
+2. Feature Name: Not Explicitly Defined in Provided Code
+   - Trigger: Not Explicitly Defined in Provided Code
+   - Execution Flow: Not Explicitly Defined in Provided Code
+   - Side Effects: Not Explicitly Defined in Provided Code
+
+EVENT HANDLERS:
+  - Event: Not Explicitly Defined in Provided Code
+  - Bound Function: Not Explicitly Defined in Provided Code
+  - State Impact: Not Explicitly Defined in Provided Code
+  - Side Effects: Not Explicitly Defined in Provided Code
+
+API INTERACTIONS:
+  - Endpoint: Not Explicitly Defined in Provided Code
+  - Method: Not Explicitly Defined in Provided Code
+  - Request Body Shape: Not Explicitly Defined in Provided Code
+  - Response Shape: Not Explicitly Defined in Provided Code
+  - Error Handling: Not Explicitly Defined in Provided Code
+
+STATE MODEL:
+  - Variable Name: Type
+  - Mutation Points: Not Explicitly Defined in Provided Code
+  - Lifecycle Dependencies: Not Explicitly Defined in Provided Code
+
+EDGE CASE HANDLING:
+  - Validation Rules: Not Explicitly Defined in Provided Code
+  - Submission Restrictions: Not Explicitly Defined in Provided Code
+  - Auto-trigger Conditions: Not Explicitly Defined in Provided Code
+
+----------------------------------------------------
+
+### BACKEND:
+----------------------------------------------------
+
+FILE METADATA:
+  Path: Not Explicitly Defined in Provided Code
+  Language: JavaScript
+  Framework (if identifiable): Express.js
+  Controller/Router Type: Express Router
+
+ENDPOINTS:
+1. POST /api/chat
+   - Input Parameters: { messages: [{ role, content }], model? }
+   - Validation Rules: messages array is required and must not be empty
+   - Authentication Requirement: Not Explicitly Defined in Provided Code
+   - Authorization Rules: Not Explicitly Defined in Provided Code
+   - Processing Steps (ordered):
+     1. Get InfinitAI configuration from environment
+     2. Set up SSE headers
+     3. Send request to InfinitAI API
+     4. Stream response
+   - Database Interaction: Not Explicitly Defined in Provided Code
+   - External Service Calls: InfinitAI API
+   - Response Format: Server-Sent Events stream
+   - Status Codes: 200, 400, 500
+
+2. POST /api/chat/sync
+   - Input Parameters: { messages: [{ role, content }], model? }
+   - Validation Rules: messages array is required and must not be empty
+   - Authentication Requirement: Not Explicitly Defined in Provided Code
+   - Authorization Rules: Not Explicitly Defined in Provided Code
+   - Processing Steps (ordered):
+     1. Get InfinitAI configuration from environment
+     2. Send request to InfinitAI API
+     3. Return response
+   - Database Interaction: Not Explicitly Defined in Provided Code
+   - External Service Calls: InfinitAI API
+   - Response Format: JSON
+   - Status Codes: 200, 400, 500
+
+BUSINESS RULES:
+  - Rule Name: Not Explicitly Defined in Provided Code
+  - Enforcement Location: Not Explicitly Defined in Provided Code
+  - Failure Response: Not Explicitly Defined in Provided Code
+
+DATA PROCESSING:
+  - Filtering Logic: Not Explicitly Defined in Provided Code
+  - Field Exclusions: Not Explicitly Defined in Provided Code
+  - Transformation Steps: Not Explicitly Defined in Provided Code
+
+SECURITY CONTROLS:
+  - Sensitive Field Protection: Not Explicitly Defined in Provided Code
+  - Input Sanitization: Not Explicitly Defined in Provided Code
+  - Integrity Checks: Not Explicitly Defined in Provided Code
+  - Rate Limiting (if present): Not Explicitly Defined in Provided Code
+
+ASYNC / BACKGROUND TASKS:
+  - Trigger Condition: Not Explicitly Defined in Provided Code
+  - Execution Flow: Not Explicitly Defined in Provided Code
+  - Side Effects: Not Explicitly Defined in Provided Code
+
+----------------------------------------------------
+
+### DATABASE:
+----------------------------------------------------
+
+PERSISTENCE TYPE: Not Explicitly Defined in Provided Code
+
+MODELS / TABLES:
+Entity Name: Not Explicitly Defined in Provided Code
+  - Fields:
+    - Name: Not Explicitly Defined in Provided Code
+    - Type: Not Explicitly Defined in Provided Code
+    - Constraints: Not Explicitly Defined in Provided Code
+  - Primary Key: Not Explicitly Defined in Provided Code
+  - Foreign Keys: Not Explicitly Defined in Provided Code
+  - Default Values: Not Explicitly Defined in Provided Code
+  - Indexes: Not Explicitly Defined in Provided Code
+
+RELATIONSHIPS:
+  - One-to-One: Not Explicitly Defined in Provided Code
+  - One-to-Many: Not Explicitly Defined in Provided Code
+  - Many-to-Many: Not Explicitly Defined in Provided Code
+
+TRANSACTION LOGIC:
+  - Atomic Operations: Not Explicitly Defined in Provided Code
+  - Upsert Rules: Not Explicitly Defined in Provided Code
+  - Cascade Behavior: Not Explicitly Defined in Provided Code
+
+DATA INTEGRITY RULES:
+  - Unique Constraints: Not Explicitly Defined in Provided Code
+  - Required Fields: Not Explicitly Defined in Provided Code
+  - Enum Restrictions: Not Explicitly Defined in Provided Code
+  - Soft Delete (if present): Not Explicitly Defined in Provided Code
+
+STORAGE / EXTERNAL DATA SERVICES:
+  - Service Name: Not Explicitly Defined in Provided Code
+  - Purpose: Not Explicitly Defined in Provided Code
+  - Integration Type: Not Explicitly Defined in Provided Code
+
+================================================================================
+                              END OF PROMPT
+================================================================================
